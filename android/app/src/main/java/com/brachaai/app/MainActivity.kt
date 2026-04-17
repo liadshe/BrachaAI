@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // 1. Tell the app where to look fo r the test audio file
-        val dummyFile = File(cacheDir, "ליעד שמריהו_260415_165702.m4a")
+        val dummyFile = File(cacheDir, "נעה חדד_260415_165702.m4a")
 
         // 2. Grab your OpenAI API key securely
         val myApiKey = BuildConfig.OPENAI_API_KEY
