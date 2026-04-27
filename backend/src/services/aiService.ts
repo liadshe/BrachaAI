@@ -5,8 +5,7 @@ dotenv.config();
 
 export interface AiAnalysis {
     summary: string;
-    tasks: string[];
-    mood: string;
+    tasks: AiTask[];
 }
 
 export interface AiTask {
@@ -25,7 +24,14 @@ export const analyzeTranscript = async (transcript: string): Promise<AiAnalysis>
         messages: [
             { 
                 role: "system", 
-                content: `You are a business assistant. Analyze the transcript and return a JSON object...` 
+                content: `You are a business assistant. Analyze the call transcript and return ONLY a JSON object with this exact structure:
+{
+  "summary": "brief summary of the call",
+  "tasks": [
+    { "task": "task description", "assignee": "person name or empty string", "deadline": "date string or empty string" }
+  ]
+}
+Return an empty array for tasks if there are none.`
             },
             { role: "user", content: transcript }
         ],
@@ -33,8 +39,11 @@ export const analyzeTranscript = async (transcript: string): Promise<AiAnalysis>
     });
 
     const content = response.choices[0].message.content || "{}";
-    console.log("AI RAW RESPONSE:", content);
-    
-    // Explicitly cast the parsed JSON to our new Interface
-    return JSON.parse(content) as AiAnalysis;
+    const parsed = JSON.parse(content);
+    console.log("AI RAW RESPONSE:", JSON.stringify(parsed, null, 2));
+
+    return {
+        summary: parsed.summary ?? parsed.Summary ?? parsed.SUMMARY ?? "",
+        tasks: parsed.tasks ?? parsed.Tasks ?? parsed.TASKS ?? [],
+    };
 };
