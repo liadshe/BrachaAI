@@ -87,7 +87,7 @@ class AudioProcessor(private val openAiApiKey: String) {
 
         val jsonBody = JSONObject().apply {
             put("contactName", parsedInfo.contactName)
-            put("date", parsedInfo.date)
+            put("date", "${parsedInfo.date}_${parsedInfo.time}")
             put("transcript", transcript)
         }
 

@@ -4,36 +4,64 @@ import * as callService from "../services/callService";
 import * as aiService from "../services/aiService";
 import { createTasksFromAi } from "../services/taskService";
 
+const parseFilenameDate = (dateString: string): Date => {
+    if (!dateString) return new Date(); // Fallback to now if no date is provided
+    
+    try {
+        // Expected format from Android: "260415_165702" (YYMMDD_HHMMSS)
+        const [datePart, timePart] = dateString.split('_');
+        
+        const year = parseInt(datePart.substring(0, 2)) + 2000; 
+        const month = parseInt(datePart.substring(2, 4)) - 1;   
+        const day = parseInt(datePart.substring(4, 6));         
+
+        const hour = parseInt(timePart.substring(0, 2));        
+        const minute = parseInt(timePart.substring(2, 4));      
+        const second = parseInt(timePart.substring(4, 6));      
+
+        return new Date(year, month, day, hour, minute, second);
+    } catch (error) {
+        console.error("Failed to parse date string, falling back to current time", error);
+        return new Date(); 
+    }
+};
+
 export const handleIncomingAndroidCall = async (
   req: Request,
   res: Response,
 ) => {
   try {
-    const { contactName, transcript } = req.body;
+    // Extract 'date' from req.body
+    const { contactName, date, transcript } = req.body; 
     const mockUserId = "65f1234567890abcdef12345";
 
-    // 1. Identify/Create the Contact
+    // Parse the date string into a Date object
+    const actualCallDate = parseFilenameDate(date); 
+
+
+    // Identify/Create the Contact
     const contact = await userService.getOrCreateContact(
       mockUserId,
       contactName,
     );
 
-    // 2. Save the initial call
+    // Pass the actualCallDate as the 4th parameter
     const call = await callService.saveRawCall(
       mockUserId,
       contact.id,
       transcript,
+      actualCallDate 
     );
 
-    // 3. Analyze using AI (Now returns an object {summary, tasks, mood})
+    // Analyze using AI (Now returns an object {summary, tasks, mood})
     const analysis = await aiService.analyzeTranscript(transcript);
 
-    // 4. Update the call with summary and mood
+    // Update the call with summary and mood
     await callService.updateCallWithAnalysis(call.id, analysis.summary);
 
-
     console.log(`Processed: ${analysis.summary}`);
-    // 5. Save the generated tasks
+    
+    // Save the generated tasks
     if (
       analysis?.tasks &&
       Array.isArray(analysis.tasks) &&
@@ -42,9 +70,6 @@ export const handleIncomingAndroidCall = async (
       await createTasksFromAi(mockUserId, contact.id, analysis.tasks);
       console.log(`Tasks created: ${analysis.tasks?.length ?? 0}`);
     }
-
-    // console.log(`Processed: ${analysis.summary}`);
-    // console.log(`Tasks created: ${analysis.tasks?.length ?? 0}`);
 
     res.status(200).json({ success: true, analysis });
   } catch (error) {

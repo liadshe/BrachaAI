@@ -4,13 +4,14 @@ import Call from '../models/Call';
 export const saveRawCall = async (
     userId: string, 
     contactId: string | mongoose.Types.ObjectId, 
-    transcript: string
+    transcript: string,
+    callDate: Date
 ) => {
     return await Call.create({
         userId,
         contactId,
         fullTranscript: transcript,
-        callDateTime: new Date(),
+        callDateTime: callDate,
     });
 };
 
