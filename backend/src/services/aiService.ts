@@ -33,7 +33,7 @@ export const analyzeTranscript = async (transcript: string): Promise<AiAnalysis>
     });
 
     const content = response.choices[0].message.content || "{}";
-    console.log("🤖 AI RAW RESPONSE:", content);
+    console.log("AI RAW RESPONSE:", content);
     
     // Explicitly cast the parsed JSON to our new Interface
     return JSON.parse(content) as AiAnalysis;

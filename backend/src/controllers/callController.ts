@@ -23,12 +23,12 @@ export const handleIncomingAndroidCall = async (req: Request, res: Response) => 
         // (You can also add analysis.mood to your Call model later!)
 
         // 5. Save the generated tasks
-        if (analysis.tasks && analysis.tasks.length > 0) {
+        if (analysis?.tasks && Array.isArray(analysis.tasks) && analysis.tasks.length > 0) {
             await createTasksFromAi(mockUserId, contact.id, analysis.tasks);
         }
 
-        console.log(`✅ Processed: ${analysis.summary}`);
-        console.log(`📝 Tasks created: ${analysis.tasks.length}`);
+        console.log(`Processed: ${analysis.summary}`);
+        console.log(`Tasks created: ${analysis.tasks.length}`);
 
         res.status(200).json({ success: true, analysis });
 
