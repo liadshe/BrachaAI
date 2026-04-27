@@ -5,11 +5,10 @@ export const createTasksFromAi = async (userId: string, contactId: string, tasks
         return Task.create({
             userId,
             contactId,
-            description: item.task, 
-            priority: 'medium',
+            title: item.title,
+            description: item.description,
+            priority: item.priority,
             status: 'todo',
-            // If the AI gave us a deadline, we save it (optional)
-            deadline: item.deadline ? new Date() : undefined 
         });
     });
     
