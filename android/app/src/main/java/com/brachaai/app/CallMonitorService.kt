@@ -38,11 +38,13 @@ class CallMonitorService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
         startWatching()
+        isRunning = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onDestroy() {
+        isRunning = false
         super.onDestroy()
         fileObserver?.stopWatching()
         serviceScope.cancel()
@@ -112,6 +114,7 @@ class CallMonitorService : Service() {
 
     companion object {
         const val WATCH_PATH = "/storage/emulated/0/Recordings/Call"
+        @Volatile var isRunning = false
         private const val NOTIFICATION_ID = 1
         private const val MONITOR_CHANNEL_ID = "call_monitor"
         private const val ERROR_CHANNEL_ID = "call_monitor_errors"

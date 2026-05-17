@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
                     )
                 } else {
                     Text(
-                        "Storage permission required for monitoring to work",
+                        "Required permissions were not granted. Please restart the app and allow all permissions.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -83,6 +83,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startMonitorService() {
-        startForegroundService(Intent(this, CallMonitorService::class.java))
+        if (!CallMonitorService.isRunning) {
+            startForegroundService(Intent(this, CallMonitorService::class.java))
+        }
     }
 }
