@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(.\\\\gradlew assembleDebug -q)",
+      "mcp__plugin_context-mode_context-mode__ctx_execute",
+      "PowerShell(cd \"C:\\\\Users\\\\Ben Levi\\\\Documents\\\\BrachaAI\\\\android\"; if \\(Test-Path \"app\\\\build\\\\outputs\\\\apk\\\\debug\\\\app-debug.apk\"\\) { Write-Host \"BUILD SUCCESSFUL\"; Get-Item \"app\\\\build\\\\outputs\\\\apk\\\\debug\\\\app-debug.apk\" | ForEach-Object { Write-Host \"APK generated: $\\($_.FullName\\)\" } } else { Write-Host \"BUILD FAILED - no APK found\" })",
+      "mcp__plugin_context-mode_context-mode__ctx_execute_file",
+      "Bash(git push *)"
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+adb push '.\נעה חדד_260415_165702.m4a' /storage/emulated/0/Recordings/Call/
