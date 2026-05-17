@@ -1,45 +1,88 @@
 package com.brachaai.app
+
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Button
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import java.io.File
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
 
+    private var permissionsGranted by mutableStateOf(false)
+
+    private val requiredPermissions: Array<String>
+        get() = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.READ_MEDIA_AUDIO)
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }.toTypedArray()
+
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        permissionsGranted = results.values.all { it }
+        if (permissionsGranted) startMonitorService()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // 1. Tell the app where to look fo r the test audio file
-        val dummyFile = File(cacheDir, "נעה חדד_260415_165702.m4a")
-
-        // 2. Grab your OpenAI API key securely
-        val myApiKey = BuildConfig.OPENAI_API_KEY
-        val processor = AudioProcessor(myApiKey)
-
-        // 3. Draw the User Interface (A simple button in the middle of the screen)
+        permissionsGranted = hasPermissions()
+        if (permissionsGranted) {
+            startMonitorService()
+        } else {
+            permissionLauncher.launch(requiredPermissions)
+        }
         setContent {
             Column(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Button(onClick = {
-                    // 4. When the button is clicked, start the background process!
-                    CoroutineScope(Dispatchers.Main).launch {
-                        processor.processAndSendToBackend(dummyFile)
-                    }
-                }) {
-                    Text("Test Bracha AI Process")
+                if (permissionsGranted) {
+                    Text("Monitoring active", style = MaterialTheme.typography.headlineSmall)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Watching: ${CallMonitorService.WATCH_PATH}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else {
+                    Text(
+                        "Storage permission required for monitoring to work",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
         }
+    }
+
+    private fun hasPermissions(): Boolean = requiredPermissions.all {
+        ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun startMonitorService() {
+        startForegroundService(Intent(this, CallMonitorService::class.java))
     }
 }
