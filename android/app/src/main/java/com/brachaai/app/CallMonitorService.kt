@@ -24,16 +24,18 @@ class CallMonitorService : Service() {
     private var fileObserver: FileObserver? = null
     private lateinit var audioProcessor: AudioProcessor
     private lateinit var notificationManager: NotificationManager
+    private val errorNotificationId = java.util.concurrent.atomic.AtomicInteger(100)
 
     override fun onCreate() {
         super.onCreate()
         audioProcessor = AudioProcessor(BuildConfig.OPENAI_API_KEY)
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannels()
+        val notification = buildMonitoringNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, buildMonitoringNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
-            startForeground(NOTIFICATION_ID, buildMonitoringNotification())
+            startForeground(NOTIFICATION_ID, notification)
         }
         startWatching()
     }
@@ -50,7 +52,9 @@ class CallMonitorService : Service() {
 
     private fun startWatching() {
         val watchDir = File(WATCH_PATH)
-        if (!watchDir.exists()) watchDir.mkdirs()
+        if (!watchDir.exists() && !watchDir.mkdirs()) {
+            Log.w(TAG, "Could not create watch directory: $WATCH_PATH")
+        }
         fileObserver = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             object : FileObserver(watchDir, CLOSE_WRITE) {
                 override fun onEvent(event: Int, path: String?) {
@@ -86,7 +90,7 @@ class CallMonitorService : Service() {
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setAutoCancel(true)
             .build()
-        notificationManager.notify(filename.hashCode(), notification)
+        notificationManager.notify(errorNotificationId.getAndIncrement(), notification)
     }
 
     private fun createNotificationChannels() {
