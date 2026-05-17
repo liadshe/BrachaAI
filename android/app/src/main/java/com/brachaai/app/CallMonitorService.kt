@@ -28,7 +28,7 @@ class CallMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        audioProcessor = AudioProcessor(BuildConfig.OPENAI_API_KEY)
+        audioProcessor = AudioProcessor(BuildConfig.OPENAI_API_KEY, cacheDir)
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannels()
         val notification = buildMonitoringNotification()

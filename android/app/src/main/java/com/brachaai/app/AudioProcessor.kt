@@ -11,7 +11,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
-class AudioProcessor(private val openAiApiKey: String) {
+class AudioProcessor(private val openAiApiKey: String, private val cacheDir: File) {
 
     private val whisperClient = WhisperApiClient(openAiApiKey)
 
@@ -58,7 +58,7 @@ class AudioProcessor(private val openAiApiKey: String) {
      */
     private fun convertToMp3(inputFile: File): File? {
         // Create a new file name: originalName.mp3
-        val outputFile = File(inputFile.parent, "${inputFile.nameWithoutExtension}.mp3")
+        val outputFile = File(cacheDir, "${inputFile.nameWithoutExtension}.mp3")
 
         // If an old test file is stuck there, delete it first
         if (outputFile.exists()) {
