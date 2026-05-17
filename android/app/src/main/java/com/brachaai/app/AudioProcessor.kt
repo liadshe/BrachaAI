@@ -48,6 +48,7 @@ class AudioProcessor(private val openAiApiKey: String) {
             } catch (e: Exception) {
                 println("Error during processing: ${e.message}")
                 e.printStackTrace()
+                throw e
             }
         }
     }
