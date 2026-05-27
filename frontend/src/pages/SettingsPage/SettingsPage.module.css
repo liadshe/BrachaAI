@@ -1,0 +1,210 @@
+.pageWrapper {
+    min-height: 100vh;
+    background-color: #f8fafc;
+    padding: 32px 16px 104px 16px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 440px;
+    margin: 0 auto;
+}
+
+.header {
+    margin-bottom: 32px;
+}
+
+.title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.profileSection {
+    background-color: #ffffff;
+    border-radius: 24px;
+    padding: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    border: 1px solid #f1f5f9;
+}
+
+.profileInfo {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.avatarBox {
+    width: 64px;
+    height: 64px;
+    background-color: #2563eb;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.userName {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 4px 0;
+}
+
+.userEmail {
+    font-size: 14px;
+    color: #64748b;
+    margin: 0;
+}
+
+.editBtn {
+    background: none;
+    border: none;
+    color: #2563eb;
+    font-weight: 600;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.settingsSection {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.sectionTitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: #475569;
+    margin: 0;
+}
+
+.settingsCard {
+    background-color: #ffffff;
+    border-radius: 24px;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    border: 1px solid #f1f5f9;
+    overflow: hidden;
+}
+
+.settingItem {
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.menuItem {
+    width: 100%;
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+}
+
+.menuItem:hover {
+    background-color: #f8fafc;
+}
+
+.settingInfo {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.iconBox {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.blueIcon {
+    background-color: #eff6ff;
+    color: #2563eb;
+}
+
+.redIcon {
+    background-color: #fff1f2;
+    color: #e11d48;
+}
+
+.purpleIcon {
+    background-color: #f5f3ff;
+    color: #7c3aed;
+}
+
+.settingText {
+    display: flex;
+    flex-direction: column;
+}
+
+.settingName {
+    font-size: 18px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.settingDescription {
+    font-size: 12px;
+    color: #64748b;
+}
+
+/* Switch Styles */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 32px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #e2e8f0;
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 24px;
+    width: 24px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked+.slider {
+    background-color: #2563eb;
+}
+
+input:checked+.slider:before {
+    transform: translateX(20px);
+}
