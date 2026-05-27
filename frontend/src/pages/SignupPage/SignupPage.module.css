@@ -1,0 +1,179 @@
+.pageWrapper {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #0f172a;
+    padding: 20px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.card {
+    width: 100%;
+    max-width: 440px;
+    background-color: #ffffff;
+    border-radius: 32px;
+    padding: 32px 32px 48px 32px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+}
+
+.backLink {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #64748b;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 24px;
+    transition: color 0.2s ease;
+}
+
+.backLink:hover {
+    color: #0f172a;
+}
+
+.logoSection {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 32px;
+}
+
+.logoBox {
+    background-color: #eef2ff;
+    padding: 20px;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 180px;
+}
+
+.logoImage {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 8px;
+}
+
+.logoTextContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.logoMainText {
+    color: #ef4444;
+    font-weight: 800;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+}
+
+.logoSubText {
+    color: #6366f1;
+    font-weight: 600;
+    font-size: 7px;
+    letter-spacing: 0.05em;
+}
+
+.title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 8px 0;
+    text-align: center;
+}
+
+.subtitle {
+    font-size: 16px;
+    color: #64748b;
+    margin: 0 0 32px 0;
+    text-align: center;
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.inputGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.inputLabel {
+    font-size: 14px;
+    font-weight: 600;
+    color: #334155;
+}
+
+.inputWithIcon {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.inputIcon {
+    position: absolute;
+    left: 16px;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.textField {
+    width: 100%;
+    padding: 14px 16px 14px 48px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    font-size: 16px;
+    color: #0f172a;
+    background-color: #ffffff;
+    transition: all 0.2s ease;
+}
+
+.textField::placeholder {
+    color: #94a3b8;
+}
+
+.textField:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+.signupButton {
+    width: 100%;
+    padding: 16px;
+    background-color: #1d4ed8;
+    color: #ffffff;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 12px;
+}
+
+.signupButton:hover {
+    background-color: #1e40af;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(29, 78, 216, 0.3);
+}
+
+.signupButton:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 480px) {
+    .card {
+        padding: 24px 20px;
+        border-radius: 24px;
+    }
+}
