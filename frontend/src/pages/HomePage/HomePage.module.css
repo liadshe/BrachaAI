@@ -1,0 +1,181 @@
+.pageWrapper {
+    min-height: 100vh;
+    background-color: #f8fafc;
+    padding: 32px 16px 104px 16px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 440px;
+    margin: 0 auto;
+    position: relative;
+}
+
+.header {
+    margin-bottom: 32px;
+}
+
+.greeting {
+    font-size: 28px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+}
+
+.searchContainer {
+    margin-bottom: 32px;
+}
+
+.searchBar {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.searchIcon {
+    position: absolute;
+    left: 20px;
+    color: #94a3b8;
+}
+
+.searchInput {
+    width: 100%;
+    padding: 18px 20px 18px 56px;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    font-size: 18px;
+    background-color: #ffffff;
+    color: #0f172a;
+    transition: all 0.2s ease;
+}
+
+.searchInput:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.05);
+}
+
+.section {
+    margin-bottom: 32px;
+}
+
+.sectionTitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: #475569;
+    margin: 0 0 16px 0;
+}
+
+.statsGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.statsCard {
+    padding: 24px 12px;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+}
+
+.statsCard.blue {
+    background-color: #eff6ff;
+    color: #1d4ed8;
+}
+
+.statsCard.red {
+    background-color: #fef2f2;
+    color: #dc2626;
+}
+
+.statsCard.green {
+    background-color: #f0fdf4;
+    color: #16a34a;
+}
+
+.statsIcon {
+    margin-bottom: 8px;
+}
+
+.statsNumber {
+    font-size: 32px;
+    font-weight: 800;
+}
+
+.statsLabel {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.insightsList {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.insightItem {
+    background-color: #ffffff;
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    border: 1px solid #f1f5f9;
+}
+
+.insightHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.callerInfo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.callIconBox {
+    width: 44px;
+    height: 44px;
+    background-color: #eff6ff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.callerName {
+    font-size: 18px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.callTime {
+    font-size: 14px;
+    color: #64748b;
+}
+
+.insightSummary {
+    font-size: 16px;
+    color: #475569;
+    line-height: 1.5;
+    margin: 0 0 16px 0;
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 12px;
+    background-color: #dcffeb;
+    color: #16a34a;
+    border-radius: 99px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+@media (max-width: 400px) {
+    .statsNumber {
+        font-size: 28px;
+    }
+}
