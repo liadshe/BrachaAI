@@ -1,20 +1,44 @@
 import { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import styles from './SignupPage.module.css';
+
 
 const SignupPage: React.FC = () => {
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [error, setError] = useState('');
     const navigate = useNavigate();
 
-    const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        console.log('Signup submitted', { fullName, email, password });
-        // Simulate successful signup and navigate to home
-        navigate('/home');
+        setError('');
+
+        if (password !== confirmPassword) {
+            setError('Passwords do not match');
+            return;
+        }
+
+        try {
+            const response = await axios.post('http://localhost:3000/api/auth/signup', {
+                name: fullName,
+                email,
+                password
+            });
+
+            const { token, user } = response.data;
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', JSON.stringify(user));
+
+            navigate('/home');
+        } catch (err: any) {
+            console.error('Signup error:', err);
+            setError(err.response?.data?.message || 'An error occurred during signup');
+        }
     };
+
 
     return (
         <div className={styles.pageWrapper}>
@@ -40,7 +64,10 @@ const SignupPage: React.FC = () => {
                 <h1 className={styles.title}>Create Account</h1>
                 <p className={styles.subtitle}>Join Bracha AI to manage your business</p>
 
+                {error && <div className={styles.errorMessage}>{error}</div>}
+
                 {/* Form Section */}
+
                 <form onSubmit={handleSubmit} className={styles.form}>
                     <div className={styles.inputGroup}>
                         <label className={styles.inputLabel}>Full Name</label>

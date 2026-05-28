@@ -1,29 +1,40 @@
 import { Request, Response } from "express";
+import Call from "../models/Call";
 import * as userService from "../services/userService";
 import * as callService from "../services/callService";
 import * as aiService from "../services/aiService";
 import { createTasksFromAi } from "../services/taskService";
 
 const parseFilenameDate = (dateString: string): Date => {
-    if (!dateString) return new Date(); // Fallback to now if no date is provided
-    
-    try {
-        // Expected format from Android: "260415_165702" (YYMMDD_HHMMSS)
-        const [datePart, timePart] = dateString.split('_');
-        
-        const year = parseInt(datePart.substring(0, 2)) + 2000; 
-        const month = parseInt(datePart.substring(2, 4)) - 1;   
-        const day = parseInt(datePart.substring(4, 6));         
+  if (!dateString) return new Date(); // Fallback to now if no date is provided
 
-        const hour = parseInt(timePart.substring(0, 2));        
-        const minute = parseInt(timePart.substring(2, 4));      
-        const second = parseInt(timePart.substring(4, 6));      
+  try {
+    // Expected format from Android: "260415_165702" (YYMMDD_HHMMSS)
+    const [datePart, timePart] = dateString.split('_');
 
-        return new Date(year, month, day, hour, minute, second);
-    } catch (error) {
-        console.error("Failed to parse date string, falling back to current time", error);
-        return new Date(); 
-    }
+    const year = parseInt(datePart.substring(0, 2)) + 2000;
+    const month = parseInt(datePart.substring(2, 4)) - 1;
+    const day = parseInt(datePart.substring(4, 6));
+
+    const hour = parseInt(timePart.substring(0, 2));
+    const minute = parseInt(timePart.substring(2, 4));
+    const second = parseInt(timePart.substring(4, 6));
+
+    return new Date(year, month, day, hour, minute, second);
+  } catch (error) {
+    console.error("Failed to parse date string, falling back to current time", error);
+    return new Date();
+  }
+};
+
+export const getCalls = async (req: Request, res: Response) => {
+  try {
+    const calls = await Call.find().sort({ timestamp: -1 });
+    res.status(200).json(calls);
+  } catch (error) {
+    console.error('Get calls error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 };
 
 export const handleIncomingAndroidCall = async (
@@ -32,11 +43,11 @@ export const handleIncomingAndroidCall = async (
 ) => {
   try {
     // Extract 'date' from req.body
-    const { contactName, date, transcript } = req.body; 
+    const { contactName, date, transcript } = req.body;
     const mockUserId = "65f1234567890abcdef12345";
 
     // Parse the date string into a Date object
-    const actualCallDate = parseFilenameDate(date); 
+    const actualCallDate = parseFilenameDate(date);
 
 
     // Identify/Create the Contact
@@ -50,7 +61,7 @@ export const handleIncomingAndroidCall = async (
       mockUserId,
       contact.id,
       transcript,
-      actualCallDate 
+      actualCallDate
     );
 
     // Analyze using AI (Now returns an object {summary, tasks, mood})
@@ -60,7 +71,7 @@ export const handleIncomingAndroidCall = async (
     await callService.updateCallWithAnalysis(call.id, analysis.summary);
 
     console.log(`Processed: ${analysis.summary}`);
-    
+
     // Save the generated tasks
     if (
       analysis?.tasks &&

@@ -1,13 +1,34 @@
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 import BottomNav from '@/components/BottomNav';
 import styles from './HomePage.module.css';
 
 const HomePage: React.FC = () => {
+    const [calls, setCalls] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+    useEffect(() => {
+        const fetchCalls = async () => {
+            try {
+                const response = await axios.get('http://localhost:3000/api/calls');
+                setCalls(response.data);
+            } catch (error) {
+                console.error('Error fetching calls:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchCalls();
+    }, []);
+
     return (
         <div className={styles.pageWrapper}>
             {/* Header */}
             <header className={styles.header}>
-                <h1 className={styles.greeting}>Good Evening, David</h1>
+                <h1 className={styles.greeting}>Good Evening, {user.name || 'User'}</h1>
             </header>
+
 
             <main className={styles.content}>
                 {/* Search Bar */}
@@ -62,25 +83,36 @@ const HomePage: React.FC = () => {
                 <section className={styles.section}>
                     <h2 className={styles.sectionTitle}>Recent Call Insights</h2>
                     <div className={styles.insightsList}>
-                        <div className={styles.insightItem}>
-                            <div className={styles.insightHeader}>
-                                <div className={styles.callerInfo}>
-                                    <div className={styles.callIconBox}>
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="m3 21 1.9-1.9a2.36 2.36 0 0 0 0-3.3l-1.44-1.44a2.36 2.36 0 0 1 0-3.32l.83-.83a2.36 2.36 0 0 1 3.32 0l1.44 1.44a2.36 2.36 0 0 0 3.3 0L14.5 9.5a2.36 2.36 0 0 0 0-3.3l-1.44-1.44a2.36 2.36 0 0 1 0-3.32l.83-.83a2.36 2.36 0 0 1 3.32 0l1.44 1.44a2.36 2.36 0 0 0 3.3 0l1.9 1.9" />
-                                        </svg>
+                        {loading ? (
+                            <p>Loading insights...</p>
+                        ) : calls.length > 0 ? (
+                            calls.map((call) => (
+                                <div key={call._id} className={styles.insightItem}>
+                                    <div className={styles.insightHeader}>
+                                        <div className={styles.callerInfo}>
+                                            <div className={styles.callIconBox}>
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="m3 21 1.9-1.9a2.36 2.36 0 0 0 0-3.3l-1.44-1.44a2.36 2.36 0 0 1 0-3.32l.83-.83a2.36 2.36 0 0 1 3.32 0l1.44 1.44a2.36 2.36 0 0 0 3.3 0L14.5 9.5a2.36 2.36 0 0 0 0-3.3l-1.44-1.44a2.36 2.36 0 0 1 0-3.32l.83-.83a2.36 2.36 0 0 1 3.32 0l1.44 1.44a2.36 2.36 0 0 0 3.3 0l1.9 1.9" />
+                                                </svg>
+                                            </div>
+                                            <span className={styles.callerName}>{call.callerName}</span>
+                                        </div>
+                                        <span className={styles.callTime}>
+                                            {new Date(call.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
                                     </div>
-                                    <span className={styles.callerName}>Michael Cohen</span>
+                                    <p className={styles.insightSummary}>
+                                        {call.summary || 'Summary pending analysis...'}
+                                    </p>
+                                    <div className={styles.badge}>{call.status || 'Processed'}</div>
                                 </div>
-                                <span className={styles.callTime}>10:30 AM</span>
-                            </div>
-                            <p className={styles.insightSummary}>
-                                Discussed new project scope and timeline expectations for Q1 deliverables
-                            </p>
-                            <div className={styles.badge}>Processed</div>
-                        </div>
+                            ))
+                        ) : (
+                            <p>No recent calls found.</p>
+                        )}
                     </div>
                 </section>
+
             </main>
 
             <BottomNav />
