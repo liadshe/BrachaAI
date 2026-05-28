@@ -1,19 +1,36 @@
 import { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-
+import axios from 'axios';
 import styles from './LoginPage.module.css';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
   const navigate = useNavigate();
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    console.log('Login submitted', { email, password });
-    navigate('/home');
+    setError('');
+
+    try {
+      const response = await axios.post('http://localhost:3000/api/auth/login', {
+        email,
+        password
+      });
+
+      const { token, user } = response.data;
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+
+      navigate('/home');
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError(err.response?.data?.message || 'Invalid email or password');
+    }
   };
+
 
 
   return (
@@ -33,7 +50,10 @@ const LoginPage: React.FC = () => {
         <h1 className={styles.welcomeTitle}>Welcome to Bracha AI</h1>
         <p className={styles.loginSubtitle}>Sign in to continue</p>
 
+        {error && <div className={styles.errorMessage}>{error}</div>}
+
         {/* Form Section */}
+
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.inputGroup}>
             <label className={styles.inputLabel}>Email</label>

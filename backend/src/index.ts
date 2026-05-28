@@ -3,6 +3,11 @@ import cors from 'cors';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import callRoutes from './routes/callRoute';
+import authRoutes from './routes/authRoute';
+import taskRoutes from './routes/taskRoute';
+import clientRoutes from './routes/clientRoute';
+
+
 
 // 1. Load the secrets from your .env file
 dotenv.config();
@@ -27,6 +32,11 @@ mongoose.connect(MONGO_URI)
 // 4. Routes
 // This tells Express: any request starting with /api should look in callRoutes
 app.use('/api', callRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api', taskRoutes);
+app.use('/api', clientRoutes);
+
+
 
 // 5. Start the engine
 app.listen(PORT, () => {

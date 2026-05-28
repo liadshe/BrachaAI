@@ -1,10 +1,41 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 import BottomNav from '@/components/BottomNav';
 import styles from './SettingsPage.module.css';
 
 const SettingsPage: React.FC = () => {
-    const [calendarSync, setCalendarSync] = useState(true);
-    const [callRecording, setCallRecording] = useState(true);
+    const [user, setUser] = useState<any>(JSON.parse(localStorage.getItem('user') || '{}'));
+    const [googleCalendarSync, setGoogleCalendarSync] = useState(user.settings?.googleCalendarSync || false);
+    const [autoCallRecording, setAutoCallRecording] = useState(user.settings?.autoCallRecording || false);
+
+    useEffect(() => {
+        // Sync state if localStorage changes (e.g. from another tab or login)
+        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        setUser(storedUser);
+        setGoogleCalendarSync(storedUser.settings?.googleCalendarSync || false);
+        setAutoCallRecording(storedUser.settings?.autoCallRecording || false);
+    }, []);
+
+    const handleToggle = async (setting: string, value: boolean) => {
+        // Optimistic UI update
+        if (setting === 'googleCalendarSync') setGoogleCalendarSync(value);
+        if (setting === 'autoCallRecording') setAutoCallRecording(value);
+
+        try {
+            // TODO: Implement backend patch for settings
+            const updatedUser = {
+                ...user,
+                settings: {
+                    ...user.settings,
+                    [setting]: value
+                }
+            };
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            setUser(updatedUser);
+        } catch (error) {
+            console.error('Error updating settings:', error);
+        }
+    };
 
     return (
         <div className={styles.pageWrapper}>
@@ -17,14 +48,18 @@ const SettingsPage: React.FC = () => {
                 <section className={styles.profileSection}>
                     <div className={styles.profileInfo}>
                         <div className={styles.avatarBox}>
-                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                                <circle cx="12" cy="7" r="4" />
-                            </svg>
+                            {user.profilePicture ? (
+                                <img src={user.profilePicture} alt="Profile" className={styles.avatarImg} />
+                            ) : (
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                                    <circle cx="12" cy="7" r="4" />
+                                </svg>
+                            )}
                         </div>
                         <div className={styles.userDetails}>
-                            <h2 className={styles.userName}>David Cohen</h2>
-                            <p className={styles.userEmail}>david@example.com</p>
+                            <h2 className={styles.userName}>{user.name || 'David Cohen'}</h2>
+                            <p className={styles.userEmail}>{user.email || 'david@example.com'}</p>
                         </div>
                     </div>
                     <button className={styles.editBtn}>Edit</button>
@@ -52,8 +87,8 @@ const SettingsPage: React.FC = () => {
                             <label className={styles.switch}>
                                 <input
                                     type="checkbox"
-                                    checked={calendarSync}
-                                    onChange={() => setCalendarSync(!calendarSync)}
+                                    checked={googleCalendarSync}
+                                    onChange={(e) => handleToggle('googleCalendarSync', e.target.checked)}
                                 />
                                 <span className={styles.slider}></span>
                             </label>
@@ -82,8 +117,8 @@ const SettingsPage: React.FC = () => {
                             <label className={styles.switch}>
                                 <input
                                     type="checkbox"
-                                    checked={callRecording}
-                                    onChange={() => setCallRecording(!callRecording)}
+                                    checked={autoCallRecording}
+                                    onChange={(e) => handleToggle('autoCallRecording', e.target.checked)}
                                 />
                                 <span className={styles.slider}></span>
                             </label>
