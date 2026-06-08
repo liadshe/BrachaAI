@@ -5,8 +5,10 @@ import HomePage from '@pages/HomePage';
 import TasksPage from '@pages/TasksPage';
 import SettingsPage from '@pages/SettingsPage';
 import ClientsPage from '@pages/ClientsPage';
+import EditProfilePage from '@pages/EditProfilePage';
 import ProtectedRoute from '@components/ProtectedRoute';
 import '@/styles/global.css';
+
 
 
 
@@ -21,12 +23,12 @@ function App() {
         <Route path="/clients" element={<ProtectedRoute><ClientsPage /></ProtectedRoute>} />
         <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+        <Route path="/edit-profile" element={<ProtectedRoute><EditProfilePage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
-
-
       </Routes>
     </BrowserRouter>
   );
 }
+
 
 export default App;

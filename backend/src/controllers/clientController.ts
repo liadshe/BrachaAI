@@ -1,9 +1,13 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import Contact from '../models/Contact';
+import { AuthRequest } from '../middleware/authMiddleware';
 
-export const getClients = async (req: Request, res: Response) => {
+export const getClients = async (req: AuthRequest, res: Response) => {
     try {
-        const clients = await Contact.find().sort({ name: 1 });
+        const userId = req.user?.id;
+        console.log(`[DEBUG] Fetching clients for userId: ${userId}`);
+        const clients = await Contact.find({ userId }).sort({ name: 1 });
+        console.log(`[DEBUG] Found ${clients.length} clients`);
         res.status(200).json(clients);
     } catch (error) {
         console.error('Get clients error:', error);

@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import apiClient from '../../services/apiClient';
 import BottomNav from '@/components/BottomNav';
 import styles from './SettingsPage.module.css';
 
 const SettingsPage: React.FC = () => {
+    const navigate = useNavigate();
     const [user, setUser] = useState<any>(JSON.parse(localStorage.getItem('user') || '{}'));
     const [googleCalendarSync, setGoogleCalendarSync] = useState(user.settings?.googleCalendarSync || false);
     const [autoCallRecording, setAutoCallRecording] = useState(user.settings?.autoCallRecording || false);
 
     useEffect(() => {
-        // Sync state if localStorage changes (e.g. from another tab or login)
         const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
         setUser(storedUser);
         setGoogleCalendarSync(storedUser.settings?.googleCalendarSync || false);
@@ -17,25 +18,31 @@ const SettingsPage: React.FC = () => {
     }, []);
 
     const handleToggle = async (setting: string, value: boolean) => {
-        // Optimistic UI update
         if (setting === 'googleCalendarSync') setGoogleCalendarSync(value);
         if (setting === 'autoCallRecording') setAutoCallRecording(value);
 
         try {
-            // TODO: Implement backend patch for settings
-            const updatedUser = {
-                ...user,
+            // Update settings in database
+            const response = await apiClient.put('/auth/profile', {
                 settings: {
                     ...user.settings,
                     [setting]: value
                 }
-            };
+            });
+            const updatedUser = response.data.user;
             localStorage.setItem('user', JSON.stringify(updatedUser));
             setUser(updatedUser);
         } catch (error) {
             console.error('Error updating settings:', error);
         }
     };
+
+    const getInitials = (fullName: string) => {
+        if (!fullName) return '?';
+        return fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    };
+
+    const isGradientAvatar = user.profilePicture?.startsWith('linear-gradient') || user.profilePicture?.startsWith('#');
 
     return (
         <div className={styles.pageWrapper}>
@@ -47,23 +54,32 @@ const SettingsPage: React.FC = () => {
                 {/* User Profile Section */}
                 <section className={styles.profileSection}>
                     <div className={styles.profileInfo}>
-                        <div className={styles.avatarBox}>
-                            {user.profilePicture ? (
-                                <img src={user.profilePicture} alt="Profile" className={styles.avatarImg} />
-                            ) : (
-                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                                    <circle cx="12" cy="7" r="4" />
-                                </svg>
-                            )}
-                        </div>
+                        {isGradientAvatar ? (
+                            <div className={styles.avatarBox} style={{ background: user.profilePicture }}>
+                                <span style={{ color: 'white', fontWeight: 'bold', fontSize: '20px', letterSpacing: '0.05em' }}>
+                                    {getInitials(user.name)}
+                                </span>
+                            </div>
+                        ) : (
+                            <div className={styles.avatarBox}>
+                                {user.profilePicture ? (
+                                    <img src={user.profilePicture} alt="Profile" className={styles.avatarImg} />
+                                ) : (
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                                        <circle cx="12" cy="7" r="4" />
+                                    </svg>
+                                )}
+                            </div>
+                        )}
                         <div className={styles.userDetails}>
                             <h2 className={styles.userName}>{user.name || 'David Cohen'}</h2>
                             <p className={styles.userEmail}>{user.email || 'david@example.com'}</p>
                         </div>
                     </div>
-                    <button className={styles.editBtn}>Edit</button>
+                    <button className={styles.editBtn} onClick={() => navigate('/edit-profile')}>Edit</button>
                 </section>
+
 
                 {/* Integrations Section */}
                 <section className={styles.settingsSection}>
@@ -148,6 +164,35 @@ const SettingsPage: React.FC = () => {
                         </button>
                     </div>
                 </section>
+
+                {/* Account Section */}
+                <section className={styles.settingsSection}>
+                    <h3 className={styles.sectionTitle}>Account</h3>
+                    <div className={styles.settingsCard}>
+                        <button className={styles.menuItem} onClick={() => {
+                            localStorage.removeItem('token');
+                            localStorage.removeItem('user');
+                            navigate('/login');
+                        }}>
+                            <div className={styles.settingInfo}>
+                                <div className={`${styles.iconBox} ${styles.redIcon}`}>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                                        <polyline points="16 17 21 12 16 7" />
+                                        <line x1="21" x2="9" y1="12" y2="12" />
+                                    </svg>
+                                </div>
+                                <div className={styles.settingText}>
+                                    <span className={styles.settingName} style={{ color: '#e11d48' }}>Log Out</span>
+                                    <span className={styles.settingDescription}>Sign out of your account</span>
+                                </div>
+                            </div>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e11d48" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="9 18 15 12 9 6" />
+                            </svg>
+                        </button>
+                    </div>
+                </section>
             </main>
 
             <BottomNav />
@@ -156,3 +201,4 @@ const SettingsPage: React.FC = () => {
 };
 
 export default SettingsPage;
+

@@ -1,9 +1,13 @@
 import { Router } from 'express';
-import { getTasks, createTask } from '../controllers/taskController';
+import { getTasks, createTask, updateTask, getTasksSummary } from '../controllers/taskController';
+import { protect } from '../middleware/authMiddleware';
 
 const router = Router();
 
-router.get('/tasks', getTasks);
-router.post('/tasks', createTask);
+router.get('/tasks', protect, getTasks);
+router.get('/tasks/summary', protect, getTasksSummary);
+router.post('/tasks', protect, createTask);
+router.patch('/tasks/:id', protect, updateTask);
 
 export default router;
+
