@@ -5,7 +5,8 @@ import dotenv from 'dotenv';
 import callRoutes from './routes/callRoute';
 import authRoutes from './routes/authRoute';
 import taskRoutes from './routes/taskRoute';
-import clientRoutes from './routes/clientRoute';
+import contactRoutes from './routes/contactRoute';
+
 
 
 
@@ -34,7 +35,7 @@ mongoose.connect(MONGO_URI)
 app.use('/api', callRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api', taskRoutes);
-app.use('/api', clientRoutes);
+app.use('/api', contactRoutes);
 
 
 

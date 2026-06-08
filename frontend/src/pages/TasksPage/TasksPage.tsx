@@ -19,7 +19,7 @@ interface Task {
 
 const TasksPage: React.FC = () => {
     const [tasks, setTasks] = useState<Task[]>([]);
-    const [clients, setClients] = useState<any[]>([]);
+    const [contacts, setContacts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'All' | 'Today' | 'Overdue' | 'Done'>('All');
 
@@ -35,12 +35,12 @@ const TasksPage: React.FC = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [tasksRes, clientsRes] = await Promise.all([
+                const [tasksRes, contactsRes] = await Promise.all([
                     apiClient.get('/tasks'),
-                    apiClient.get('/clients')
+                    apiClient.get('/contacts')
                 ]);
                 setTasks(tasksRes.data);
-                setClients(clientsRes.data);
+                setContacts(contactsRes.data);
             } catch (error) {
                 console.error('Error fetching tasks data:', error);
             } finally {
@@ -247,15 +247,15 @@ const TasksPage: React.FC = () => {
                             </div>
 
                             <div className={styles.inputGroup}>
-                                <label className={styles.inputLabel}>Client / Contact</label>
+                                <label className={styles.inputLabel}>Contact</label>
                                 <select
                                     value={editContactId}
                                     onChange={(e) => setEditContactId(e.target.value)}
                                     className={styles.selectField}
                                 >
                                     <option value="">No Contact</option>
-                                    {clients.map(client => (
-                                        <option key={client._id} value={client._id}>{client.name}</option>
+                                    {contacts.map(contact => (
+                                        <option key={contact._id} value={contact._id}>{contact.name}</option>
                                     ))}
                                 </select>
                             </div>

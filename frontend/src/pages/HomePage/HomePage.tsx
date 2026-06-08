@@ -7,6 +7,7 @@ const HomePage: React.FC = () => {
     const [calls, setCalls] = useState<any[]>([]);
     const [stats, setStats] = useState({ open: 0, overdue: 0, closedToday: 0 });
     const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
     const user = JSON.parse(localStorage.getItem('user') || '{}');
 
     useEffect(() => {
@@ -34,6 +35,13 @@ const HomePage: React.FC = () => {
         return 'Good Evening';
     };
 
+    const filteredCalls = calls.filter(call => {
+        const contactName = (call.contactId?.name || call.callerName || '').toLowerCase();
+        const summary = (call.callSummary || '').toLowerCase();
+        const query = searchQuery.toLowerCase();
+        return contactName.includes(query) || summary.includes(query);
+    });
+
     return (
         <div className={styles.pageWrapper}>
             {/* Header */}
@@ -49,7 +57,13 @@ const HomePage: React.FC = () => {
                             <circle cx="11" cy="11" r="8" />
                             <path d="m21 21-4.3-4.3" />
                         </svg>
-                        <input type="text" placeholder="Search clients or calls..." className={styles.searchInput} />
+                        <input 
+                            type="text" 
+                            placeholder="Search contacts or calls..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className={styles.searchInput} 
+                        />
                     </div>
                 </div>
 
@@ -96,8 +110,8 @@ const HomePage: React.FC = () => {
                     <div className={styles.insightsList}>
                         {loading ? (
                             <p className={styles.statusMessage}>Loading insights...</p>
-                        ) : calls.length > 0 ? (
-                            calls.map((call) => (
+                        ) : filteredCalls.length > 0 ? (
+                            filteredCalls.map((call) => (
                                 <div key={call._id} className={styles.insightItem}>
                                     <div className={styles.insightHeader}>
                                         <div className={styles.callerInfo}>
