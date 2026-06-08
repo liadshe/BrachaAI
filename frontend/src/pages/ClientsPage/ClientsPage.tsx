@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import apiClient from '../../services/apiClient';
 import BottomNav from '@/components/BottomNav';
 import styles from './ClientsPage.module.css';
 
@@ -20,7 +20,7 @@ const ClientsPage: React.FC = () => {
     useEffect(() => {
         const fetchClients = async () => {
             try {
-                const response = await axios.get('http://localhost:3000/api/clients');
+                const response = await apiClient.get('/clients');
                 setClients(response.data);
             } catch (error) {
                 console.error('Error fetching clients:', error);

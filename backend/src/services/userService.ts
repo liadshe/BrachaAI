@@ -1,4 +1,5 @@
 import Contact from '../models/Contact';
+import User from '../models/User';
 
 export const getOrCreateContact = async (userId: string, contactName: string) => {
 
@@ -15,4 +16,9 @@ export const getOrCreateContact = async (userId: string, contactName: string) =>
         console.log(`👤 Created new contact: ${contactName}`);
     }
     return contact;
+};
+
+export const getFirstUser = async () => {
+    const user = await User.findOne();
+    return user;
 };

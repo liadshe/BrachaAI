@@ -4,6 +4,7 @@ import * as userService from "../services/userService";
 import * as callService from "../services/callService";
 import * as aiService from "../services/aiService";
 import { createTasksFromAi } from "../services/taskService";
+import { AuthRequest } from "../middleware/authMiddleware";
 
 const parseFilenameDate = (dateString: string): Date => {
   if (!dateString) return new Date(); // Fallback to now if no date is provided
@@ -27,9 +28,12 @@ const parseFilenameDate = (dateString: string): Date => {
   }
 };
 
-export const getCalls = async (req: Request, res: Response) => {
+export const getCalls = async (req: AuthRequest, res: Response) => {
   try {
-    const calls = await Call.find().sort({ timestamp: -1 });
+    const userId = req.user?.id;
+    console.log(`[DEBUG] Fetching calls for userId: ${userId}`);
+    const calls = await Call.find({ userId }).populate('contactId').sort({ callDateTime: -1 });
+    console.log(`[DEBUG] Found ${calls.length} calls`);
     res.status(200).json(calls);
   } catch (error) {
     console.error('Get calls error:', error);
@@ -44,21 +48,24 @@ export const handleIncomingAndroidCall = async (
   try {
     // Extract 'date' from req.body
     const { contactName, date, transcript } = req.body;
-    const mockUserId = "65f1234567890abcdef12345";
+    
+    // Dynamically fetch first user from DB as active user
+    const firstUser = await userService.getFirstUser();
+    const activeUserId = firstUser ? firstUser.id : "65f1234567890abcdef12345";
+    console.log(`[DEBUG] Android call webhook. Mapping to activeUserId: ${activeUserId}`);
 
     // Parse the date string into a Date object
     const actualCallDate = parseFilenameDate(date);
 
-
     // Identify/Create the Contact
     const contact = await userService.getOrCreateContact(
-      mockUserId,
+      activeUserId,
       contactName,
     );
 
     // Pass the actualCallDate as the 4th parameter
     const call = await callService.saveRawCall(
-      mockUserId,
+      activeUserId,
       contact.id,
       transcript,
       actualCallDate
@@ -78,7 +85,7 @@ export const handleIncomingAndroidCall = async (
       Array.isArray(analysis.tasks) &&
       analysis.tasks.length > 0
     ) {
-      await createTasksFromAi(mockUserId, contact.id, analysis.tasks);
+      await createTasksFromAi(activeUserId, contact.id, analysis.tasks);
       console.log(`Tasks created: ${analysis.tasks?.length ?? 0}`);
     }
 
