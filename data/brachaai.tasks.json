@@ -1,0 +1,345 @@
+[{
+  "_id": {
+    "$oid": "6a32b86895e450d84c99919d"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32b86195e450d84c99919b"
+  },
+  "title": "שליחת חוזה לתומר",
+  "description": "שליחת חוזה מסודר למייל של תומר עם המחיר המובטח וקישור לתשלום מקדמה.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T15:08:24.320Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T15:08:24.320Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32b86895e450d84c99919e"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32b86195e450d84c99919b"
+  },
+  "title": "התקנה של הקטרינג",
+  "description": "הצוות מגיע בשני ביולי בשעה ארבע להקים את הכל עבור האירוע המתחיל בשש בערב.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T15:08:24.321Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T15:08:24.321Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32b91795e450d84c9991a1"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32b91495e450d84c99919f"
+  },
+  "title": "שליחת הודעה עם תפריט ואישור תאריך",
+  "description": "נועה צריכה לשלוח לדנה הודעה עם תפריט המתוקים המלא ואישור התאריך לאירוע.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T15:11:19.712Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T15:11:19.712Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32b91795e450d84c9991a2"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32b91495e450d84c99919f"
+  },
+  "title": "קישור לתשלום המקדמה",
+  "description": "שליחת קישור לדנה לתשלום המקדמה עבור שירותי הכינוכים לאירוע.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T15:11:19.712Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T15:11:19.712Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32b9c295e450d84c9991a6"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32b9bf95e450d84c9991a3"
+  },
+  "title": "איסוף האוכל",
+  "description": "משה צריך לאסוף את האוכל ביום שישי ה-26 ביוני בין 12 ל-2 בצהריים.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T15:14:10.826Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T15:14:10.826Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32b9c295e450d84c9991a5"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32b9bf95e450d84c9991a3"
+  },
+  "title": "שליחת תפריט מעוצב",
+  "description": "נועת צריכה לשלוח למשה את התפריט המעוצב יום לפני האירוע.",
+  "priority": "MEDIUM",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T15:14:10.826Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T15:14:10.826Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32bad095e450d84c9991ac"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32bacc95e450d84c9991aa"
+  },
+  "title": "שליחת אופציות לטעימות",
+  "description": "נועה תשלח שלוש אופציות לתאריכים לטעימות לגיא עד מחר בוואטסאפ.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T15:18:40.549Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T15:18:40.549Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32bba695e450d84c9991b2"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32bba395e450d84c9991af"
+  },
+  "title": "תשלום לאירוע ברנץ'",
+  "description": "עידן צריך לבצע תשלום מאובטח דרך הקישור שנשלח לו.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T15:22:14.357Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T15:22:14.357Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32bba695e450d84c9991b1"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32bba395e450d84c9991af"
+  },
+  "title": "שלח מידע על נקודת המפגש",
+  "description": "עידן צריך לשלוח לנועה את מיקומו המדויק ביער בן שמן.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T15:22:14.357Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T15:22:14.357Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32c55695e450d84c9991b7"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32c55295e450d84c9991b5"
+  },
+  "title": "שליחת תאריכים לטעימות",
+  "description": "נועה תשלח לגיא שלוש אופציות לתאריכים לטעימות עד מחר.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T16:03:34.922Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T16:03:34.922Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32c5a495e450d84c9991bc"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32c5a295e450d84c9991ba"
+  },
+  "title": "Send location for the event",
+  "description": "Send the exact location in Yaar Ben Shemen to the catering team.",
+  "priority": "MEDIUM",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T16:04:52.526Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T16:04:52.526Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32c5a495e450d84c9991bd"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32c5a295e450d84c9991ba"
+  },
+  "title": "Complete secure payment",
+  "description": "Complete the payment via the secure link sent by Noa.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T16:04:52.526Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T16:04:52.526Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32c5ab95e450d84c9991c0"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32c5a995e450d84c9991be"
+  },
+  "title": "שליחת תפריט מעוצב",
+  "description": "נועה תשלח למשה את התפריט המעוצב יום לפני האירוע.",
+  "priority": "MEDIUM",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T16:04:59.580Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T16:04:59.580Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32c5b395e450d84c9991c3"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32c5b095e450d84c9991c1"
+  },
+  "title": "שליחת תפריט מתוקים וקישור לתשלום מקדמה לדנה",
+  "description": "לשלוח לדנה הודעה עם תפריט המתוקים המלא, אישור התאריך וקישור לתשלום המקדמה.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T16:05:07.053Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T16:05:07.053Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32c5ba95e450d84c9991c6"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32c5b795e450d84c9991c4"
+  },
+  "title": "שליחת חוזה וקישור לתשלום",
+  "description": "נוער צריכה לשלוח לתומר חוזה מסודר עם המחיר המובטח וקישור לתשלום מקדמה של 20%.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T16:05:14.335Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T16:05:14.335Z"
+  },
+  "__v": 0
+}]

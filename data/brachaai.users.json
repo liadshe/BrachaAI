@@ -1,0 +1,17 @@
+[{
+  "_id": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "name": "avia1",
+  "email": "avia1@gmail.com",
+  "password": "$2b$12$4KO2hBkksvH95DkwpmvmDuDQ3k3LfMNgRaKn5k4dUUyqfKRnSyafO",
+  "settings": {
+    "googleCalendarSync": false,
+    "autoCallRecording": false
+  },
+  "permissions": {
+    "microphone": false,
+    "contacts": false
+  },
+  "__v": 0
+}]
