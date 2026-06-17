@@ -38,9 +38,14 @@ class AudioProcessor(private val openAiApiKey: String, private val cacheDir: Fil
                 val transcriptText = whisperClient.transcribeAudio(mp3File)
                 println("5. Whisper Transcript: $transcriptText")
 
-                // 5. Send data to Node.js Backend
-                println("6. Sending data to backend...")
-                sendDataToNodeServer(parsedInfo, transcriptText)
+                // 5. Correct spelling with GPT-4o
+                println("6. Correcting spelling and grammar...")
+                val correctedTranscript = whisperClient.correctSpelling(transcriptText)
+                println("7. Corrected Transcript: $correctedTranscript")
+
+                // 6. Send data to Node.js Backend
+                println("8. Sending data to backend...")
+                sendDataToNodeServer(parsedInfo, correctedTranscript)
 
                 // Optional: Clean up the mp3 file after we are done so we don't waste phone storage
                 mp3File.delete()
