@@ -15,7 +15,9 @@ import java.util.concurrent.TimeUnit
 
 class WhisperApiClient(private val apiKey: String) {
 
-    private val TAG = "WhisperApiClient"
+    companion object {
+        private const val TAG = "WhisperApiClient"
+    }
 
     // Give the app plenty of time to upload the audio and wait for the AI
     private val client = OkHttpClient.Builder()
