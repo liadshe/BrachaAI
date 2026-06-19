@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+// const apiClient = axios.create({
+//     baseURL: (import.meta.env.VITE_API_URL as string) || 'http://192.168.7.19:3000/api',
+// });
 const apiClient = axios.create({
-    baseURL: (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000/api',
+    baseURL: 'http://192.168.7.19:3000/api',
 });
 
 // Automatically inject JWT token into all outgoing requests

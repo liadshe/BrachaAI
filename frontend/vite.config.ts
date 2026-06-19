@@ -8,6 +8,7 @@ const __dirname = path.dirname(__filename)
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {
@@ -17,9 +18,5 @@ export default defineConfig({
       '@services': path.resolve(__dirname, './src/services'),
       '@utils': path.resolve(__dirname, './src/utils'),
     },
-  },
-  server: {
-    host: '0.0.0.0',
-    port: 5173,
-  },
+  }
 })

@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter , Routes, Route, Navigate } from 'react-router-dom';
+
 import LoginPage from '@pages/LoginPage';
 import SignupPage from '@pages/SignupPage';
 import HomePage from '@pages/HomePage';
@@ -11,11 +12,9 @@ import ProtectedRoute from '@components/ProtectedRoute';
 import '@/styles/global.css';
 
 
-
-
 function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -28,9 +27,8 @@ function App() {
         <Route path="/edit-profile" element={<ProtectedRoute><EditProfilePage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
-
 
 export default App;
