@@ -87,7 +87,7 @@ npm run preview
 Create `.env.development` for local development:
 
 ```env
-VITE_API_URL=http://localhost:3000/api
+VITE_API_URL=http://192.168.7.19:3000/api
 ```
 
 Create `.env.production` for production:

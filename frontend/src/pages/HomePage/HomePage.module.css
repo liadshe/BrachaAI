@@ -1,17 +1,52 @@
 .pageWrapper {
-    min-height: 100vh;
+    min-height: 100vh; /* Safely forces full screen */
+    display: flex;
+    flex-direction: column;
     background-color: #f8fafc;
-    padding: 32px 16px 104px 16px;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     max-width: 440px;
     margin: 0 auto;
     position: relative;
 }
 
-.header {
-    margin-bottom: 32px;
+.contentArea {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
 }
 
+.header {
+    /* THIS IS THE MAGIC FIX */
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background-color: #f8fafc;
+    padding: 32px 16px 16px 16px;
+    margin-bottom: 0px;
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    /* Extra padding at the bottom so the BottomNav doesn't cover your last item */
+    padding: 16px 16px calc(90px + env(safe-area-inset-bottom, 0px)) 16px;
+}
+
+.header {
+    flex-shrink: 0;
+    padding: 32px 16px 16px 16px;
+    background-color: #f8fafc;
+    margin-bottom: 0;
+    z-index: 10;
+}
+
+
+.content::-webkit-scrollbar {
+    display: none; 
+}
+
+/* --- Home Specific Styles --- */
 .greeting {
     font-size: 28px;
     font-weight: 700;
@@ -79,20 +114,9 @@
     text-align: center;
 }
 
-.statsCard.blue {
-    background-color: #eff6ff;
-    color: #1d4ed8;
-}
-
-.statsCard.red {
-    background-color: #fef2f2;
-    color: #dc2626;
-}
-
-.statsCard.green {
-    background-color: #f0fdf4;
-    color: #16a34a;
-}
+.statsCard.blue { background-color: #eff6ff; color: #1d4ed8; }
+.statsCard.red { background-color: #fef2f2; color: #dc2626; }
+.statsCard.green { background-color: #f0fdf4; color: #16a34a; }
 
 .statsIcon {
     margin-bottom: 8px;
@@ -113,6 +137,40 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    min-height: 240px;
+}
+
+.statusMessage {
+    color: #64748b;
+    font-size: 16px;
+    text-align: center;
+    padding: 40px 0;
+}
+
+.placeholderCard {
+    background-color: #ffffff;
+    border-radius: 24px;
+    padding: 20px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
+.placeholderLine {
+    height: 14px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #e2e8f0 25%, #f8fafc 50%, #e2e8f0 75%);
+    background-size: 200% 100%;
+    margin-bottom: 12px;
+}
+
+.placeholderLine:last-child {
+    margin-bottom: 0;
+}
+
+@keyframes pulse {
+    0%, 100% { background-position: 200% 0; }
+    50% { background-position: -200% 0; }
 }
 
 .insightItem {
@@ -175,7 +233,5 @@
 }
 
 @media (max-width: 400px) {
-    .statsNumber {
-        font-size: 28px;
-    }
+    .statsNumber { font-size: 28px; }
 }

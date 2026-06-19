@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import styles from './SignupPage.module.css';
 
+// use the env file for the base URL, fallback to local IP if not set
+const baseURL = (import.meta.env.VITE_API_URL as string) || 'http://192.168.7.19:3000/api';
 
 const SignupPage: React.FC = () => {
     const [fullName, setFullName] = useState('');
@@ -22,7 +24,7 @@ const SignupPage: React.FC = () => {
         }
 
         try {
-            const response = await axios.post('http://localhost:3000/api/auth/signup', {
+            const response = await axios.post(baseURL + '/auth/signup', {
                 name: fullName,
                 email,
                 password
