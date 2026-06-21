@@ -38,7 +38,7 @@ const LoginPage: React.FC = () => {
       <div className={styles.card}>
         <div className={styles.logoSection}>
           <div className={styles.logoBox}>
-            <img src="logo.jpg" alt="Bracha AI" className={styles.logoImage} />
+            <img src="logo.png" alt="Bracha AI" className={styles.logoImage} />
           </div>
         </div>
 
