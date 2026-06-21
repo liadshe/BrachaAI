@@ -27,3 +27,9 @@ Ctrl + Shift + IiPhone SE
 iPhone 12 Pro
 Pixel 7
 Galaxy S20
+
+# to test on android studio emulator - you need to build the project and copy it to /android/app/src/main/assets/www
+cd frontend
+npm run build 
+rm -rf ../android/app/src/main/assets/www/*
+cp -R dist/* ../android/app/src/main/assets/www
