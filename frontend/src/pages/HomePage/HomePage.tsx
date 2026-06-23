@@ -141,7 +141,7 @@ const HomePage: React.FC = () => {
                                                     </svg>
                                                 </div>
                                                 <span className={styles.callerName}>
-                                                    {call.contactName || call.callerName || 'Unknown Caller'}
+                                                    {call.contactId?.name || call.callerName || 'Unknown Caller'}
                                                 </span>
                                             </div>
                                             <span className={styles.callTime}>
