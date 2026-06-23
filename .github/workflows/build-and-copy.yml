@@ -1,11 +1,14 @@
 name: Build Frontend and Update Android Assets
 
-# This tells GitHub to run this workflow on every commit to ANY branch
 on: [push]
 
 jobs:
   build-and-update:
     runs-on: ubuntu-latest
+    
+    # Grant permissions for the bot to push to the repo
+    permissions:
+      contents: write
 
     steps:
       # 1. Checkout the repository code
@@ -16,23 +19,33 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.20.0'
+          node-version: '20'
 
       # 3. Execute the requested build and copy commands
       - name: Install dependencies, build, and copy assets
         run: |
-          # Navigate to the frontend directory
           cd frontend
-          
-          # Install dependencies (required before building)
           npm install
-          
-          # Run the build script
           npm run build
           
-          # Ensure the target directory exists, then clear out old assets
           mkdir -p ../android/app/src/main/assets/www
           rm -rf ../android/app/src/main/assets/www/*
-          
-          # Copy the newly built files to the Android directory
           cp -R dist/* ../android/app/src/main/assets/www/
+
+      # 4. Commit and push the new files back to GitHub
+      - name: Commit and Push changes
+        run: |
+          # Set up a generic bot user to make the commit
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Stage the Android folder
+          git add android/app/src/main/assets/www
+          
+          # Check if there are actually changes to commit (prevents workflow errors)
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git commit -m "Update Android assets from frontend build"
+            git push
+          else
+            echo "No changes to commit."
+          fi
