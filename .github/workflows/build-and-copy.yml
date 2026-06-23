@@ -1,0 +1,38 @@
+name: Build Frontend and Update Android Assets
+
+# This tells GitHub to run this workflow on every commit to ANY branch
+on: [push]
+
+jobs:
+  build-and-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Set up the Node.js environment
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+
+      # 3. Execute the requested build and copy commands
+      - name: Install dependencies, build, and copy assets
+        run: |
+          # Navigate to the frontend directory
+          cd frontend
+          
+          # Install dependencies (required before building)
+          npm install
+          
+          # Run the build script
+          npm run build
+          
+          # Ensure the target directory exists, then clear out old assets
+          mkdir -p ../android/app/src/main/assets/www
+          rm -rf ../android/app/src/main/assets/www/*
+          
+          # Copy the newly built files to the Android directory
+          cp -R dist/* ../android/app/src/main/assets/www/
