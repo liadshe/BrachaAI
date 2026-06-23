@@ -3,8 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import styles from './SignupPage.module.css';
 
-// use the env file for the base URL, fallback to local IP if not set
-const baseURL = (import.meta.env.VITE_API_URL as string) || 'http://192.168.7.19:3000/api';
+const baseURL = (import.meta.env.VITE_API_URL as string);
 
 const SignupPage: React.FC = () => {
     const [fullName, setFullName] = useState('');
@@ -55,7 +54,7 @@ const SignupPage: React.FC = () => {
                 {/* Logo Section */}
                 <div className={styles.logoSection}>
                     <div className={styles.logoBox}>
-                        <img src="/logo.jpg" alt="Bracha AI" className={styles.logoImage} />
+                        <img src="/logo.png" alt="Bracha AI" className={styles.logoImage} />
                         <div className={styles.logoTextContainer}>
                             <span className={styles.logoMainText}>BRACHA.AI</span>
                             <span className={styles.logoSubText}>BECAUSE BRACHA REMEMBERS.</span>

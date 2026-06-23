@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import styles from './LoginPage.module.css';
 
-const baseURL = (import.meta.env.VITE_API_URL as string) || 'http://192.168.7.19:3000/api';
+const baseURL = (import.meta.env.VITE_API_URL as string);
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
