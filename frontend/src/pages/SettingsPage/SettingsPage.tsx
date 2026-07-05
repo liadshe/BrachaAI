@@ -74,7 +74,7 @@ const SettingsPage: React.FC = () => {
                         )}
                         <div className={styles.userDetails}>
                             <h2 className={styles.userName}>{user.name || 'David Cohen'}</h2>
-                            <p className={styles.userEmail}>{user.email || 'david@example.com'}</p>
+                            <p className={styles.userEmail}>{user.phoneNumber || 'No phone number'}</p>
                         </div>
                     </div>
                     <button className={styles.editBtn} onClick={() => navigate('/edit-profile')}>Edit</button>
@@ -201,4 +201,3 @@ const SettingsPage: React.FC = () => {
 };
 
 export default SettingsPage;
-
