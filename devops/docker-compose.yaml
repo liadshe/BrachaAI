@@ -22,7 +22,7 @@ services:
     environment:
       - PORT=3000
       - DATABASE_URL=mongodb://admin:secretpassword@mongodb:27017/bracha?authSource=admin
-      - OPENAI_API_KEY=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
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       - mongodb
 
