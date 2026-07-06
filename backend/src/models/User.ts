@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IUser extends Document {
     name: string;
     email: string;
+    phoneNumber: string;
     password?: string;
     profilePicture?: string;
     settings: {
@@ -18,6 +19,7 @@ export interface IUser extends Document {
 const UserSchema = new Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
+    phoneNumber: { type: String, required: true, unique: true },
     password: { type: String }, // Optional for now if using other auth methods later
     profilePicture: { type: String },
     settings: {

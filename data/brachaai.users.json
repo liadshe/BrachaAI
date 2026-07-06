@@ -4,7 +4,8 @@
   },
   "name": "avia1",
   "email": "avia1@gmail.com",
-  "password": "$2b$12$4KO2hBkksvH95DkwpmvmDuDQ3k3LfMNgRaKn5k4dUUyqfKRnSyafO",
+  "phoneNumber": "0509381415",
+  "password": "$2b$12$8yTy2MTUJ94OE/CdwMcdOucDyFlP4m1weJUf3UicuUoWivsQgET1e",
   "settings": {
     "googleCalendarSync": false,
     "autoCallRecording": false
