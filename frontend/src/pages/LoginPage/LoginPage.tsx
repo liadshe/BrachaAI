@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import styles from './LoginPage.module.css';
 
+const baseURL = (import.meta.env.VITE_API_URL as string);
+
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,7 +17,7 @@ const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:3000/api/auth/login', {
+      const response = await axios.post(baseURL + '/auth/login', {
         email,
         password
       });
@@ -31,28 +33,18 @@ const LoginPage: React.FC = () => {
     }
   };
 
-
-
   return (
     <div className={styles.pageWrapper}>
       <div className={styles.card}>
-        {/* Logo Section */}
         <div className={styles.logoSection}>
           <div className={styles.logoBox}>
-            <img src="/logo.jpg" alt="Bracha AI" className={styles.logoImage} />
-            <div className={styles.logoTextContainer}>
-              <span className={styles.logoMainText}>BRACHA.AI</span>
-              <span className={styles.logoSubText}>BECAUSE BRACHA REMEMBERS.</span>
-            </div>
+            <img src="logo.png" alt="Bracha AI" className={styles.logoImage} />
           </div>
         </div>
 
-        <h1 className={styles.welcomeTitle}>Welcome to Bracha AI</h1>
-        <p className={styles.loginSubtitle}>Sign in to continue</p>
+        <p className={styles.loginSubtitle}>Bracha AI analyzes your calls to help manage tasks and clients.</p>
 
         {error && <div className={styles.errorMessage}>{error}</div>}
-
-        {/* Form Section */}
 
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.inputGroup}>
@@ -101,15 +93,10 @@ const LoginPage: React.FC = () => {
         </form>
 
         <Link to="/signup" className={styles.signUpLink}>
-          Create new account
+          Still not using Bracha? Sign up now
         </Link>
-
-        <div className={styles.footerNote}>
-          Bracha AI analyzes your calls to help manage tasks and clients.
-        </div>
       </div>
     </div>
-
   );
 };
 

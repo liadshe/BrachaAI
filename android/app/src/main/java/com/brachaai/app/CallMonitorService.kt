@@ -28,15 +28,20 @@ class CallMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // Initialize AudioProcessor with API key and cache directory
         audioProcessor = AudioProcessor(BuildConfig.OPENAI_API_KEY, cacheDir)
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannels()
+        
         val notification = buildMonitoringNotification()
+        
+        // Handle foreground service type for Android 14+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
+        
         startWatching()
         isRunning = true
     }
@@ -45,9 +50,9 @@ class CallMonitorService : Service() {
 
     override fun onDestroy() {
         isRunning = false
-        super.onDestroy()
         fileObserver?.stopWatching()
         serviceScope.cancel()
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -57,15 +62,17 @@ class CallMonitorService : Service() {
         if (!watchDir.exists() && !watchDir.mkdirs()) {
             Log.w(TAG, "Could not create watch directory: $WATCH_PATH")
         }
+
+        // Use FileObserver.CLOSE_WRITE instead of just CLOSE_WRITE
         fileObserver = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            object : FileObserver(watchDir, CLOSE_WRITE) {
+            object : FileObserver(watchDir, FileObserver.CLOSE_WRITE) {
                 override fun onEvent(event: Int, path: String?) {
                     if (path != null) handleNewFile(File(watchDir, path))
                 }
             }
         } else {
             @Suppress("DEPRECATION")
-            object : FileObserver(WATCH_PATH, CLOSE_WRITE) {
+            object : FileObserver(WATCH_PATH, FileObserver.CLOSE_WRITE) {
                 override fun onEvent(event: Int, path: String?) {
                     if (path != null) handleNewFile(File(watchDir, path))
                 }
@@ -91,17 +98,26 @@ class CallMonitorService : Service() {
             .setContentText(message)
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
         notificationManager.notify(errorNotificationId.getAndIncrement(), notification)
     }
 
     private fun createNotificationChannels() {
-        notificationManager.createNotificationChannel(
-            NotificationChannel(MONITOR_CHANNEL_ID, "Call Monitor", NotificationManager.IMPORTANCE_LOW)
-        )
-        notificationManager.createNotificationChannel(
-            NotificationChannel(ERROR_CHANNEL_ID, "Processing Errors", NotificationManager.IMPORTANCE_DEFAULT)
-        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val monitorChannel = NotificationChannel(
+                MONITOR_CHANNEL_ID,
+                "Call Monitor",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val errorChannel = NotificationChannel(
+                ERROR_CHANNEL_ID,
+                "Processing Errors",
+                NotificationManager.IMPORTANCE_DEFAULT
+            )
+            notificationManager.createNotificationChannel(monitorChannel)
+            notificationManager.createNotificationChannel(errorChannel)
+        }
     }
 
     private fun buildMonitoringNotification(): Notification =
@@ -110,6 +126,7 @@ class CallMonitorService : Service() {
             .setContentText("Monitoring call recordings...")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
     companion object {

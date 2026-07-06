@@ -8,18 +8,13 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.webkit.WebView as AndroidWebView
 import androidx.activity.ComponentActivity
+import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -32,6 +27,7 @@ class MainActivity : ComponentActivity() {
 
     private var permissionsGranted by mutableStateOf(false)
     private var allFilesGranted by mutableStateOf(false)
+    private var webView: AndroidWebView? = null
 
     private val requiredPermissions: Array<String>
         get() = buildList {
@@ -52,22 +48,28 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        onBackPressedDispatcher.addCallback(this) {
+            if (webView?.canGoBack() == true) {
+                webView?.goBack()
+            } else {
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+            }
+        }
+
         refreshPermissionState()
+
         setContent {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
+                modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 if (permissionsGranted && allFilesGranted) {
-                    Text("Monitoring active", style = MaterialTheme.typography.headlineSmall)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Watching: ${CallMonitorService.WATCH_PATH}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    WebViewScreen(url = "file:///android_asset/www/index.html") { wv ->
+                        webView = wv
+                    }
                 } else if (!allFilesGranted) {
                     Text(
                         "\"All files access\" is required so the app can read call recordings.",
@@ -95,7 +97,6 @@ class MainActivity : ComponentActivity() {
     private fun refreshPermissionState() {
         permissionsGranted = hasPermissions()
         allFilesGranted = hasAllFilesAccess()
-
         if (!permissionsGranted && requiredPermissions.isNotEmpty()) {
             permissionLauncher.launch(requiredPermissions)
         } else if (permissionsGranted && allFilesGranted) {

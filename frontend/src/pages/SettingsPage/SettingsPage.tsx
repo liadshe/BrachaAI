@@ -46,11 +46,12 @@ const SettingsPage: React.FC = () => {
 
     return (
         <div className={styles.pageWrapper}>
-            <header className={styles.header}>
-                <h1 className={styles.title}>Settings</h1>
-            </header>
+            <div className={styles.contentArea}>
+                <header className={styles.header}>
+                    <h1 className={styles.title}>Settings</h1>
+                </header>
 
-            <main className={styles.content}>
+                <main className={styles.content}>
                 {/* User Profile Section */}
                 <section className={styles.profileSection}>
                     <div className={styles.profileInfo}>
@@ -194,7 +195,7 @@ const SettingsPage: React.FC = () => {
                     </div>
                 </section>
             </main>
-
+            </div>
             <BottomNav />
         </div>
     );

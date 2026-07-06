@@ -15,9 +15,7 @@ if (localPropertiesFile.exists()) {
 }
 android {
     namespace = "com.brachaai.app"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.brachaai.app"
@@ -74,4 +72,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     // FFmpeg for audio conversion
-    implementation("io.github.maxrave-dev:ffmpeg-kit-audio:6.0.1")}
+    implementation("io.github.maxrave-dev:ffmpeg-kit-audio:6.0.1")
+    // for using webview
+    implementation("androidx.webkit:webkit:1.11.0")
+}

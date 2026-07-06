@@ -20,7 +20,7 @@ class AudioProcessor(private val openAiApiKey: String, private val cacheDir: Fil
             try {
                 println("1. Starting processing for: ${audioFile.name}")
 
-                // 2. Parse the filename
+                // 2. Parse the filename (from FilenameParser.kt)
                 val parsedInfo = parseFilename(audioFile.name)
                 println("2. Parsed Info - Name: ${parsedInfo.contactName}, Date: ${parsedInfo.date}")
 
@@ -47,8 +47,10 @@ class AudioProcessor(private val openAiApiKey: String, private val cacheDir: Fil
                 println("8. Sending data to backend...")
                 sendDataToNodeServer(parsedInfo, correctedTranscript)
 
-                // Optional: Clean up the mp3 file after we are done so we don't waste phone storage
-                mp3File.delete()
+                // Optional: Clean up the mp3 file after we are done
+                if (mp3File.exists()) {
+                    mp3File.delete()
+                }
 
             } catch (e: Exception) {
                 println("Error during processing: ${e.message}")
@@ -63,7 +65,7 @@ class AudioProcessor(private val openAiApiKey: String, private val cacheDir: Fil
      */
     private fun convertToMp3(inputFile: File): File? {
         // Create a new file name: originalName.mp3
-        val outputFile = File(cacheDir, "${inputFile.nameWithoutExtension}.mp3")
+        val outputFile = File(this.cacheDir, "${inputFile.nameWithoutExtension}.mp3")
 
         // If an old test file is stuck there, delete it first
         if (outputFile.exists()) {
@@ -71,9 +73,6 @@ class AudioProcessor(private val openAiApiKey: String, private val cacheDir: Fil
         }
 
         // Build the FFmpeg command
-        // -i = input file
-        // -vn = skip video (just in case)
-        // -ar 44100 -ac 2 -b:a 128k = standard mp3 audio quality
         val command = "-i \"${inputFile.absolutePath}\" -vn -ar 44100 -ac 2 -b:a 128k \"${outputFile.absolutePath}\""
 
         // Run the conversion!
@@ -104,12 +103,17 @@ class AudioProcessor(private val openAiApiKey: String, private val cacheDir: Fil
             .post(requestBody)
             .build()
 
-        client.newCall(request).execute().use { response ->
-            if (response.isSuccessful) {
-                println("SUCCESS! Data sent to backend: ${response.body?.string()}")
-            } else {
-                println("FAILED to send to backend. Code: ${response.code}")
+        try {
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    println("SUCCESS! Data sent to backend: ${response.body?.string()}")
+                } else {
+                    println("FAILED to send to backend. Code: ${response.code}")
+                }
             }
+        } catch (e: Exception) {
+            println("FAILED to connect to backend: ${e.message}")
+            throw e
         }
     }
 }

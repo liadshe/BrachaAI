@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import styles from './SignupPage.module.css';
 
+const baseURL = (import.meta.env.VITE_API_URL as string);
 
 const SignupPage: React.FC = () => {
     const [fullName, setFullName] = useState('');
@@ -23,7 +24,7 @@ const SignupPage: React.FC = () => {
         }
 
         try {
-            const response = await axios.post('http://localhost:3000/api/auth/signup', {
+            const response = await axios.post(baseURL + '/auth/signup', {
                 name: fullName,
                 email,
                 phoneNumber,
@@ -54,15 +55,8 @@ const SignupPage: React.FC = () => {
 
                 {/* Logo Section */}
                 <div className={styles.logoSection}>
-                    <div className={styles.logoBox}>
-                        <img src="/logo.jpg" alt="Bracha AI" className={styles.logoImage} />
-                        <div className={styles.logoTextContainer}>
-                            <span className={styles.logoMainText}>BRACHA.AI</span>
-                            <span className={styles.logoSubText}>BECAUSE BRACHA REMEMBERS.</span>
-                        </div>
-                    </div>
+                <img src="/logo.png" alt="Bracha AI" className={styles.logoImage} />
                 </div>
-
                 <h1 className={styles.title}>Create Account</h1>
                 <p className={styles.subtitle}>Join Bracha AI to manage your business</p>
 
