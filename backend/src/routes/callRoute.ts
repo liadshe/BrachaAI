@@ -4,10 +4,10 @@ import { protect } from '../middleware/authMiddleware';
 
 const router = Router();
 
-// This defines the /api/calls endpoint
-// Since index.ts uses app.use('/api', callRoutes), 
-// this becomes http://localhost:3000/api/calls
+// POST /api/calls -> PUBLIC (So the Android app can send data)
 router.post('/calls', handleIncomingAndroidCall);
+
+// GET /api/calls -> PROTECTED (So only logged-in users can see calls)
 router.get('/calls', protect, getCalls);
 
 export default router;
