@@ -18,6 +18,7 @@ const EditProfilePage: React.FC = () => {
     const [name, setName] = useState(user.name || '');
     const [email, setEmail] = useState(user.email || '');
     const [password, setPassword] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState(user.phoneNumber || '');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [selectedAvatar, setSelectedAvatar] = useState(user.profilePicture || PRESET_AVATARS[0].bg);
     
@@ -40,6 +41,7 @@ const EditProfilePage: React.FC = () => {
             const response = await apiClient.put('/auth/profile', {
                 name,
                 email,
+                phoneNumber,
                 password: password || undefined,
                 profilePicture: selectedAvatar
             });
