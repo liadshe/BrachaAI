@@ -37,6 +37,13 @@ const SettingsPage: React.FC = () => {
         }
     };
 
+    const formatPhoneNumber = (phone: string) => {
+        if (!phone) return '';
+        const digits = phone.replace(/\D/g, '');
+        if (digits.length !== 10) return phone; // fallback if not a standard 10-digit number
+        return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    };
+
     const getInitials = (fullName: string) => {
         if (!fullName) return '?';
         return fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -75,7 +82,7 @@ const SettingsPage: React.FC = () => {
                         )}
                         <div className={styles.userDetails}>
                             <h2 className={styles.userName}>{user.name || 'David Cohen'}</h2>
-                            <p className={styles.userEmail}>{user.phoneNumber || 'No phone number'}</p>
+                            <p className={styles.userEmail}>{user.phoneNumber ? formatPhoneNumber(user.phoneNumber) : 'No phone number'}</p>
                         </div>
                     </div>
                     <button className={styles.editBtn} onClick={() => navigate('/edit-profile')}>Edit</button>
