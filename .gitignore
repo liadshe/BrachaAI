@@ -1,4 +1,5 @@
 /backend/node_modules
 /backend/.env
+/devops/.env
 /ui/*        
 ./PROJECT_ANALYSIS.md
