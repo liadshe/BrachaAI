@@ -10,7 +10,7 @@ export const getOrCreateContact = async (userId: string, contactName: string) =>
         contact = await Contact.create({
             userId,
             name: contactName,
-            phone: "000-000-000", // Placeholder until we get real Caller ID
+            phone: "000-00000", // place holder 
             isVip: false
         });
         console.log(`👤 Created new contact: ${contactName}`);

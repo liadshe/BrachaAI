@@ -79,6 +79,16 @@ export const login = async (req: Request, res: Response) => {
         // Generate JWT
         const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
 
+        console.log("User logged in:", {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                phoneNumber: user.phoneNumber,
+                settings: user.settings,
+                permissions: user.permissions,
+                profilePicture: user.profilePicture
+            } );
+
         res.status(200).json({
             token,
             user: {
@@ -89,7 +99,7 @@ export const login = async (req: Request, res: Response) => {
                 settings: user.settings,
                 permissions: user.permissions,
                 profilePicture: user.profilePicture
-            }
+            }   
         });
     } catch (error) {
         console.error('Login error:', error);
