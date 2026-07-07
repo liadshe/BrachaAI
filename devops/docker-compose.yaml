@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 services:
   mongodb:
     image: mongo:7.0
@@ -28,4 +29,36 @@ services:
       - mongodb
 
 volumes:
+=======
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: bracha-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ../data:/init-data:ro
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: secretpassword
+
+  backend:
+    build:
+      context: ../backend/.
+      dockerfile: Dockerfile
+    container_name: bracha-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DATABASE_URL=mongodb://admin:secretpassword@mongodb:27017/brachaai?authSource=admin
+      - OPENAI_API_KEY=${API}
+      - mongodb
+
+volumes:
+>>>>>>> 821758780fde0dd7087fc1c0b4c43582faa6942e
   mongo_data:
