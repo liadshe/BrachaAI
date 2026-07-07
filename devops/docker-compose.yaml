@@ -26,5 +26,5 @@ services:
       - DATABASE_URL=mongodb://admin:secretpassword@mongodb:27017/brachaai?authSource=admin
       - OPENAI_API_KEY=${API}
       - mongodb
-  volumes:
-    mongo_data:
+volumes:
+   mongo_data:
