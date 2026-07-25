@@ -16,7 +16,10 @@ dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 // 2. Middleware
-app.use(express_1.default.json());
+// Default 100kb limit truncates real call transcripts (a ~1hr Hebrew call is ~2 bytes/char
+// and comfortably exceeds 100kb), which the client treats as a permanent 413 rejection and
+// deletes on-device. Raise it so long transcripts aren't silently destroyed.
+app.use(express_1.default.json({ limit: '5mb' }));
 app.use((0, cors_1.default)());
 // 3. Connect to MongoDB
 const MONGO_URI = process.env.DATABASE_URL || "mongodb://localhost:27017/brachaai";

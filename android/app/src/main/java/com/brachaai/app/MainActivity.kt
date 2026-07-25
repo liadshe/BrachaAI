@@ -31,7 +31,6 @@ class MainActivity : ComponentActivity() {
 
     private val requiredPermissions: Array<String>
         get() = buildList {
-            add(Manifest.permission.READ_CALL_LOG)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.READ_MEDIA_AUDIO)
                 add(Manifest.permission.POST_NOTIFICATIONS)
@@ -40,10 +39,20 @@ class MainActivity : ComponentActivity() {
             }
         }.toTypedArray()
 
+    // READ_CALL_LOG is requested opportunistically (so users who grant it still get caller
+    // numbers) but deliberately excluded from requiredPermissions: it's hard-restricted on
+    // API 29+ and can be denied instantly with no dialog, and it must never block the WebView
+    // from rendering — the WebView is the only place the auth token comes from. A denial or
+    // no-op here is fully handled downstream: CallerLookup.findNumberNear catches
+    // SecurityException and returns null, and the backend accepts callerNumber: null.
+    private val optionalPermissions: Array<String> = arrayOf(Manifest.permission.READ_CALL_LOG)
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        permissionsGranted = results.values.all { it }
+    ) { _ ->
+        // Re-derive from actual grant state rather than trusting `results` directly, since a
+        // single launcher call may request both required and optional permissions together.
+        permissionsGranted = hasPermissions()
         if (permissionsGranted && allFilesGranted) startMonitorService()
     }
 
@@ -102,15 +111,21 @@ class MainActivity : ComponentActivity() {
         permissionsGranted = hasPermissions()
         allFilesGranted = hasAllFilesAccess()
         if (!permissionsGranted && requiredPermissions.isNotEmpty()) {
-            permissionLauncher.launch(requiredPermissions)
+            permissionLauncher.launch(requiredPermissions + optionalPermissions)
+        } else if (!hasPermission(Manifest.permission.READ_CALL_LOG)) {
+            // Required permissions are already satisfied (or there are none to ask for on
+            // this SDK level). Ask for READ_CALL_LOG on its own — opportunistic, non-gating.
+            permissionLauncher.launch(optionalPermissions)
+            if (permissionsGranted && allFilesGranted) startMonitorService()
         } else if (permissionsGranted && allFilesGranted) {
             startMonitorService()
         }
     }
 
-    private fun hasPermissions(): Boolean = requiredPermissions.all {
-        ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
-    }
+    private fun hasPermissions(): Boolean = requiredPermissions.all(::hasPermission)
+
+    private fun hasPermission(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
     private fun hasAllFilesAccess(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()

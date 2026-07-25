@@ -73,6 +73,16 @@ class AudioProcessor(
                 val correctedTranscript = whisperClient.correctSpelling(transcriptText)
                 println("7. Corrected Transcript: $correctedTranscript")
 
+                if (correctedTranscript.isBlank()) {
+                    // A GPT-4o refusal or filtered completion can return "" without throwing.
+                    // Uploading it would get a 400 from the backend (transcript required),
+                    // which is non-retryable and gets permanently deleted. Stop here instead
+                    // so nothing is ever uploaded or queued, and surface it via the existing
+                    // error-notification path (handleNewFile's catch in CallMonitorService).
+                    Log.e(TAG, "Corrected transcript is blank for ${audioFile.name}; not uploading or queuing")
+                    throw IllegalStateException("Transcript came back blank for ${audioFile.name}; not uploaded")
+                }
+
                 val callerNumber = parsedInfo.toEpochMillis()?.let { callerLookup.findNumberNear(it) }
                 println("8. Caller number: ${callerNumber ?: "unavailable"}")
 
@@ -225,7 +235,12 @@ class AudioProcessor(
 
     companion object {
         private const val TAG = "AudioProcessor"
-        /** HTTP statuses the backend uses for permanently-invalid payloads — retrying never helps. */
-        private val NON_RETRYABLE_CODES = setOf(400, 413, 422)
+        /**
+         * HTTP statuses the backend uses for permanently-invalid payloads — retrying never
+         * helps. 413 is deliberately NOT included: it reflects server body-size configuration,
+         * not a permanent property of the payload, so a 413 should be retried (e.g. after the
+         * backend limit is raised) rather than treated as a reason to destroy the transcript.
+         */
+        private val NON_RETRYABLE_CODES = setOf(400, 422)
     }
 }

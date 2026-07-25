@@ -23,7 +23,10 @@ apiClient.interceptors.response.use((response) => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.BrachaNative?.clearAuth();
-        window.location.href = '/login';
+        // The app runs from file:///android_asset/www/index.html under HashRouter, so a
+        // path-based redirect resolves to file:///login (ERR_FILE_NOT_FOUND) and dead-ends
+        // the app until it's force-stopped. Use a hash redirect instead.
+        window.location.hash = '#/login';
     }
     return Promise.reject(error);
 });
