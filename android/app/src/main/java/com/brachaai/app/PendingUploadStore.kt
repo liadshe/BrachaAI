@@ -29,6 +29,7 @@ class PendingUploadStore(private val dir: File) {
         if (!dir.exists() && !dir.mkdirs()) {
             Log.w(TAG, "Could not create pending upload directory: ${dir.absolutePath}")
         }
+        cleanupStaleTemps()
     }
 
     fun enqueue(upload: PendingUpload) {
@@ -66,6 +67,7 @@ class PendingUploadStore(private val dir: File) {
                 return
             }
             evictOverflow()
+            cleanupStaleTemps()
         }
     }
 
@@ -105,6 +107,16 @@ class PendingUploadStore(private val dir: File) {
     private fun listFiles(): List<File> =
         dir.listFiles { f -> f.isFile && f.name.endsWith(".json") }?.sortedBy { it.name } ?: emptyList()
 
+    private fun cleanupStaleTemps() {
+        val threshold = System.currentTimeMillis() - TEMP_FILE_AGE_THRESHOLD_MS
+        dir.listFiles { f -> f.isFile && f.name.endsWith(".tmp") }?.forEach { tempFile ->
+            if (tempFile.lastModified() < threshold) {
+                Log.w(TAG, "Cleaning up orphaned temp file ${tempFile.name}: older than ${TEMP_FILE_AGE_THRESHOLD_MS}ms")
+                tempFile.delete()
+            }
+        }
+    }
+
     private fun evictOverflow() {
         val files = listFiles()
         val cutoff = System.currentTimeMillis() - MAX_AGE_MS
@@ -127,5 +139,6 @@ class PendingUploadStore(private val dir: File) {
         private const val TAG = "PendingUploadStore"
         const val MAX_ENTRIES = 200
         const val MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000
+        private const val TEMP_FILE_AGE_THRESHOLD_MS = 60_000L  // 1 minute
     }
 }
