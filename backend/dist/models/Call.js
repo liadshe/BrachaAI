@@ -41,5 +41,6 @@ const CallSchema = new mongoose_1.Schema({
     callSummary: { type: String },
     callDateTime: { type: Date, default: Date.now },
     callLength: { type: Number }, // in seconds
+    callType: { type: String, enum: ['INCOMING', 'OUTGOING', 'UNKNOWN'], default: 'UNKNOWN' }
 });
 exports.default = mongoose_1.default.model('Call', CallSchema);

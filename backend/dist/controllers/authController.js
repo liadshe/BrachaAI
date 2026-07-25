@@ -95,17 +95,10 @@ exports.login = login;
 const updateProfile = async (req, res) => {
     try {
         const userId = req.user?.id;
-        const { name, email, password, profilePicture, phoneNumber } = req.body;
+        const { name, phoneNumber, password, profilePicture } = req.body;
         const user = await User_1.default.findById(userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
-        }
-        if (email && email !== user.email) {
-            const emailExists = await User_1.default.findOne({ email });
-            if (emailExists) {
-                return res.status(400).json({ message: 'Email already in use' });
-            }
-            user.email = email;
         }
         if (phoneNumber && phoneNumber !== user.phoneNumber) {
             const phoneExists = await User_1.default.findOne({ phoneNumber });

@@ -28,8 +28,8 @@ class CallMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        // Initialize AudioProcessor with API key and cache directory
-        audioProcessor = AudioProcessor(BuildConfig.OPENAI_API_KEY, cacheDir)
+        // Initialize AudioProcessor with context (this), API key and cache directory
+        audioProcessor = AudioProcessor(this, BuildConfig.OPENAI_API_KEY, cacheDir)
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannels()
         
@@ -63,7 +63,7 @@ class CallMonitorService : Service() {
             Log.w(TAG, "Could not create watch directory: $WATCH_PATH")
         }
 
-        // Use FileObserver.CLOSE_WRITE instead of just CLOSE_WRITE
+        // Use FileObserver.CLOSE_WRITE
         fileObserver = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             object : FileObserver(watchDir, FileObserver.CLOSE_WRITE) {
                 override fun onEvent(event: Int, path: String?) {

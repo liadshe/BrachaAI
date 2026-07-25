@@ -37,6 +37,8 @@ class MainActivity : ComponentActivity() {
             } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
                 add(Manifest.permission.READ_EXTERNAL_STORAGE)
             }
+            // Add Call Log permission
+            add(Manifest.permission.READ_CALL_LOG)
         }.toTypedArray()
 
     private val permissionLauncher = registerForActivityResult(
@@ -81,9 +83,13 @@ class MainActivity : ComponentActivity() {
                     }
                 } else {
                     Text(
-                        "Required permissions were not granted. Please restart the app and allow all permissions.",
+                        "Required permissions (Storage & Call Log) were not granted. Please restart the app and allow all permissions.",
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    Spacer(Modifier.height(16.dp))
+                    Button(onClick = { permissionLauncher.launch(requiredPermissions) }) {
+                        Text("Grant Permissions")
+                    }
                 }
             }
         }
@@ -97,9 +103,7 @@ class MainActivity : ComponentActivity() {
     private fun refreshPermissionState() {
         permissionsGranted = hasPermissions()
         allFilesGranted = hasAllFilesAccess()
-        if (!permissionsGranted && requiredPermissions.isNotEmpty()) {
-            permissionLauncher.launch(requiredPermissions)
-        } else if (permissionsGranted && allFilesGranted) {
+        if (permissionsGranted && allFilesGranted) {
             startMonitorService()
         }
     }

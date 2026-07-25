@@ -5,13 +5,15 @@ export const saveRawCall = async (
     userId: string, 
     contactId: string | mongoose.Types.ObjectId, 
     transcript: string,
-    callDate: Date
+    callDate: Date,
+    callType: string = 'UNKNOWN'
 ) => {
     return await Call.create({
         userId,
         contactId,
         fullTranscript: transcript,
         callDateTime: callDate,
+        callType: callType
     });
 };
 
