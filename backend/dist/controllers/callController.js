@@ -77,35 +77,49 @@ const getCalls = async (req, res) => {
 exports.getCalls = getCalls;
 const handleIncomingAndroidCall = async (req, res) => {
     try {
-        // Extract 'date' from req.body
-        const { contactName, date, transcript } = req.body;
-        // Dynamically fetch first user from DB as active user
-        const firstUser = await userService.getFirstUser();
-        const activeUserId = firstUser ? firstUser.id : "65f1234567890abcdef12345";
-        console.log(`[DEBUG] Android call webhook. Mapping to activeUserId: ${activeUserId}`);
-        // Parse the date string into a Date object
-        const actualCallDate = parseFilenameDate(date);
-        // Identify/Create the Contact
-        const contact = await userService.getOrCreateContact(activeUserId, contactName);
-        // Pass the actualCallDate as the 4th parameter
-        const call = await callService.saveRawCall(activeUserId, contact.id, transcript, actualCallDate);
-        // Analyze using AI (Now returns an object {summary, tasks, mood})
-        const analysis = await aiService.analyzeTranscript(transcript);
-        // Update the call with summary and mood
-        await callService.updateCallWithAnalysis(call.id, analysis.summary);
-        console.log(`Processed: ${analysis.summary}`);
-        // Save the generated tasks
-        if (analysis?.tasks &&
-            Array.isArray(analysis.tasks) &&
-            analysis.tasks.length > 0) {
-            await (0, taskService_1.createTasksFromAi)(activeUserId, contact.id, analysis.tasks);
-            console.log(`Tasks created: ${analysis.tasks?.length ?? 0}`);
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: 'Unauthenticated' });
         }
-        res.status(200).json({ success: true, analysis });
+        const { contactName, date, transcript, callerNumber } = req.body;
+        if (!transcript) {
+            return res.status(400).json({ success: false, message: 'transcript is required' });
+        }
+        console.log(`[DEBUG] Android call webhook for userId: ${userId}`);
+        const actualCallDate = parseFilenameDate(date);
+        const contact = await userService.getOrCreateContact(userId, contactName, callerNumber ?? null);
+        const call = await callService.saveRawCall(userId, contact.id, transcript, actualCallDate);
+        // Respond as soon as the call is durable. Analysis is slow and may fail;
+        // making the client wait on it would turn AI errors into duplicate uploads.
+        res.status(201).json({ success: true, callId: call.id, analysisStatus: 'pending' });
+        void runAnalysis(call.id, userId, contact.id, transcript);
     }
     catch (error) {
         console.error("Controller Error:", error);
-        res.status(500).json({ success: false });
+        if (!res.headersSent)
+            res.status(500).json({ success: false });
     }
 };
 exports.handleIncomingAndroidCall = handleIncomingAndroidCall;
+const runAnalysis = async (callId, userId, contactId, transcript) => {
+    try {
+        const analysis = await aiService.analyzeTranscript(transcript);
+        await callService.updateCallWithAnalysis(callId, analysis.summary);
+        console.log(`Processed: ${analysis.summary}`);
+        if (analysis?.tasks &&
+            Array.isArray(analysis.tasks) &&
+            analysis.tasks.length > 0) {
+            await (0, taskService_1.createTasksFromAi)(userId, contactId, analysis.tasks);
+            console.log(`Tasks created: ${analysis.tasks.length}`);
+        }
+    }
+    catch (error) {
+        console.error(`Analysis failed for call ${callId}:`, error);
+        try {
+            await callService.markAnalysisFailed(callId);
+        }
+        catch (markFailedError) {
+            console.error(`Failed to mark analysis as failed for call ${callId}:`, markFailedError);
+        }
+    }
+};
