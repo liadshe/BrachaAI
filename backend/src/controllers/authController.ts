@@ -2,8 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'bracha_secret_key_123';
+import { JWT_SECRET } from '../config/jwt';
 
 export const signup = async (req: Request, res: Response) => {
     try {

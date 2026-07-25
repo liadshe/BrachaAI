@@ -7,7 +7,7 @@ exports.updateProfile = exports.login = exports.signup = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const User_1 = __importDefault(require("../models/User"));
-const JWT_SECRET = process.env.JWT_SECRET || 'bracha_secret_key_123';
+const jwt_1 = require("../config/jwt");
 const signup = async (req, res) => {
     try {
         const { name, email, password, phoneNumber } = req.body;
@@ -39,7 +39,7 @@ const signup = async (req, res) => {
             }
         });
         // Generate JWT
-        const token = jsonwebtoken_1.default.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jsonwebtoken_1.default.sign({ id: newUser._id }, jwt_1.JWT_SECRET, { expiresIn: '7d' });
         res.status(201).json({
             token,
             user: {
@@ -72,7 +72,7 @@ const login = async (req, res) => {
             return res.status(401).json({ message: 'Invalid email or password' });
         }
         // Generate JWT
-        const token = jsonwebtoken_1.default.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jsonwebtoken_1.default.sign({ id: user._id }, jwt_1.JWT_SECRET, { expiresIn: '7d' });
         res.status(200).json({
             token,
             user: {
@@ -95,17 +95,10 @@ exports.login = login;
 const updateProfile = async (req, res) => {
     try {
         const userId = req.user?.id;
-        const { name, email, password, profilePicture, phoneNumber } = req.body;
+        const { name, phoneNumber, password, profilePicture } = req.body;
         const user = await User_1.default.findById(userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
-        }
-        if (email && email !== user.email) {
-            const emailExists = await User_1.default.findOne({ email });
-            if (emailExists) {
-                return res.status(400).json({ message: 'Email already in use' });
-            }
-            user.email = email;
         }
         if (phoneNumber && phoneNumber !== user.phoneNumber) {
             const phoneExists = await User_1.default.findOne({ phoneNumber });

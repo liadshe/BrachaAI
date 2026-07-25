@@ -25,6 +25,8 @@ services:
       - PORT=3000
       - DATABASE_URL=mongodb://admin:secretpassword@mongodb:27017/brachaai?authSource=admin
       - OPENAI_API_KEY=${API}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in devops/.env}
+    depends_on:
       - mongodb
 volumes:
    mongo_data:
