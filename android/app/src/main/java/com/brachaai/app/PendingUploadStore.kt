@@ -4,6 +4,8 @@ import android.util.Log
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 data class PendingUpload(
     val contactName: String,
@@ -15,10 +17,13 @@ data class PendingUpload(
 /**
  * Durable queue of uploads that could not be delivered (no token, 401, or network failure).
  * One JSON file per entry, named so lexical order == chronological order.
+ * Thread-safe via lock: all public operations are synchronized to prevent concurrent
+ * access races, especially between enqueue (atomic write) and peekAll (read).
  */
 class PendingUploadStore(private val dir: File) {
 
     private val counter = AtomicInteger(0)
+    private val lock = ReentrantLock()
 
     init {
         if (!dir.exists() && !dir.mkdirs()) {
@@ -35,17 +40,36 @@ class PendingUploadStore(private val dir: File) {
         }
 
         val name = String.format("%013d-%03d.json", System.currentTimeMillis(), counter.getAndIncrement() % 1000)
+        val finalFile = File(dir, name)
+        val tempFile = File(dir, "$name.tmp")
+
+        // Write to temp file first (outside lock for I/O efficiency).
         try {
-            File(dir, name).writeText(json.toString())
-            Log.d(TAG, "Queued upload $name; queue size = ${size()}")
+            tempFile.writeText(json.toString())
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to queue upload", e)
+            Log.e(TAG, "Failed to write temp file for upload", e)
             return
         }
-        evictOverflow()
+
+        // Atomic rename and eviction, protected by lock.
+        lock.withLock {
+            try {
+                if (!tempFile.renameTo(finalFile)) {
+                    Log.e(TAG, "Failed to rename temp file to $name")
+                    tempFile.delete()
+                    return
+                }
+                Log.d(TAG, "Queued upload $name; queue size = ${sizeUnlocked()}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to finalize upload write", e)
+                tempFile.delete()
+                return
+            }
+            evictOverflow()
+        }
     }
 
-    fun peekAll(): List<Pair<File, PendingUpload>> =
+    fun peekAll(): List<Pair<File, PendingUpload>> = lock.withLock {
         listFiles().mapNotNull { file ->
             try {
                 val json = JSONObject(file.readText())
@@ -62,14 +86,21 @@ class PendingUploadStore(private val dir: File) {
                 null
             }
         }
+    }
 
     fun remove(file: File) {
-        if (file.exists() && !file.delete()) {
-            Log.w(TAG, "Could not delete queue entry ${file.name}")
+        lock.withLock {
+            if (file.exists() && !file.delete()) {
+                Log.w(TAG, "Could not delete queue entry ${file.name}")
+            }
         }
     }
 
-    fun size(): Int = listFiles().size
+    fun size(): Int = lock.withLock {
+        sizeUnlocked()
+    }
+
+    private fun sizeUnlocked(): Int = listFiles().size
 
     private fun listFiles(): List<File> =
         dir.listFiles { f -> f.isFile && f.name.endsWith(".json") }?.sortedBy { it.name } ?: emptyList()
