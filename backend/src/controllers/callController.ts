@@ -92,6 +92,10 @@ const runAnalysis = async (
     }
   } catch (error) {
     console.error(`Analysis failed for call ${callId}:`, error);
-    await callService.markAnalysisFailed(callId);
+    try {
+      await callService.markAnalysisFailed(callId);
+    } catch (markFailedError) {
+      console.error(`Failed to mark analysis as failed for call ${callId}:`, markFailedError);
+    }
   }
 };
