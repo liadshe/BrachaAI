@@ -99,7 +99,7 @@ class AudioProcessor(private val openAiApiKey: String, private val cacheDir: Fil
         val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())
 
         val request = Request.Builder()
-            .url("http://10.0.2.2:3000/api/calls")
+            .url("http://193.106.55.154:3000/api/calls")
             .post(requestBody)
             .build()
 
