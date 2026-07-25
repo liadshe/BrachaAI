@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import Call from "../models/Call";
 import * as userService from "../services/userService";
 import * as callService from "../services/callService";
@@ -42,19 +42,26 @@ export const getCalls = async (req: AuthRequest, res: Response) => {
 };
 
 export const handleIncomingAndroidCall = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
 ) => {
   try {
-    const { contactName, date, transcript } = req.body;
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthenticated' });
+    }
 
-    const firstUser = await userService.getFirstUser();
-    const activeUserId = firstUser ? firstUser.id : "65f1234567890abcdef12345";
+    const { contactName, date, transcript } = req.body;
+    if (!transcript) {
+      return res.status(400).json({ success: false, message: 'transcript is required' });
+    }
+
+    console.log(`[DEBUG] Android call webhook for userId: ${userId}`);
 
     const actualCallDate = parseFilenameDate(date);
-    const contact = await userService.getOrCreateContact(activeUserId, contactName);
+    const contact = await userService.getOrCreateContact(userId, contactName);
     const call = await callService.saveRawCall(
-      activeUserId,
+      userId,
       contact.id,
       transcript,
       actualCallDate
@@ -64,7 +71,7 @@ export const handleIncomingAndroidCall = async (
     // making the client wait on it would turn AI errors into duplicate uploads.
     res.status(201).json({ success: true, callId: call.id, analysisStatus: 'pending' });
 
-    void runAnalysis(call.id, activeUserId, contact.id, transcript);
+    void runAnalysis(call.id, userId, contact.id, transcript);
   } catch (error) {
     console.error("Controller Error:", error);
     if (!res.headersSent) res.status(500).json({ success: false });
