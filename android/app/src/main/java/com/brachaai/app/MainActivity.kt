@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
 
     private val requiredPermissions: Array<String>
         get() = buildList {
+            add(Manifest.permission.READ_CALL_LOG)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.READ_MEDIA_AUDIO)
                 add(Manifest.permission.POST_NOTIFICATIONS)
