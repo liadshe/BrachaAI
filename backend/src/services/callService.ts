@@ -16,5 +16,17 @@ export const saveRawCall = async (
 };
 
 export const updateCallWithAnalysis = async (callId: string, summary: string) => {
-    return await Call.findByIdAndUpdate(callId, { callSummary: summary }, { returnDocument: 'after' });
+    return await Call.findByIdAndUpdate(
+        callId,
+        { callSummary: summary, analysisStatus: 'done' },
+        { returnDocument: 'after' }
+    );
+};
+
+export const markAnalysisFailed = async (callId: string) => {
+    return await Call.findByIdAndUpdate(
+        callId,
+        { analysisStatus: 'failed' },
+        { returnDocument: 'after' }
+    );
 };

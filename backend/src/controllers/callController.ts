@@ -46,24 +46,13 @@ export const handleIncomingAndroidCall = async (
   res: Response,
 ) => {
   try {
-    // Extract 'date' from req.body
     const { contactName, date, transcript } = req.body;
-    
-    // Dynamically fetch first user from DB as active user
+
     const firstUser = await userService.getFirstUser();
     const activeUserId = firstUser ? firstUser.id : "65f1234567890abcdef12345";
-    console.log(`[DEBUG] Android call webhook. Mapping to activeUserId: ${activeUserId}`);
 
-    // Parse the date string into a Date object
     const actualCallDate = parseFilenameDate(date);
-
-    // Identify/Create the Contact
-    const contact = await userService.getOrCreateContact(
-      activeUserId,
-      contactName,
-    );
-
-    // Pass the actualCallDate as the 4th parameter
+    const contact = await userService.getOrCreateContact(activeUserId, contactName);
     const call = await callService.saveRawCall(
       activeUserId,
       contact.id,
@@ -71,27 +60,38 @@ export const handleIncomingAndroidCall = async (
       actualCallDate
     );
 
-    // Analyze using AI (Now returns an object {summary, tasks, mood})
+    // Respond as soon as the call is durable. Analysis is slow and may fail;
+    // making the client wait on it would turn AI errors into duplicate uploads.
+    res.status(201).json({ success: true, callId: call.id, analysisStatus: 'pending' });
+
+    void runAnalysis(call.id, activeUserId, contact.id, transcript);
+  } catch (error) {
+    console.error("Controller Error:", error);
+    if (!res.headersSent) res.status(500).json({ success: false });
+  }
+};
+
+const runAnalysis = async (
+  callId: string,
+  userId: string,
+  contactId: string,
+  transcript: string,
+) => {
+  try {
     const analysis = await aiService.analyzeTranscript(transcript);
-
-    // Update the call with summary and mood
-    await callService.updateCallWithAnalysis(call.id, analysis.summary);
-
+    await callService.updateCallWithAnalysis(callId, analysis.summary);
     console.log(`Processed: ${analysis.summary}`);
 
-    // Save the generated tasks
     if (
       analysis?.tasks &&
       Array.isArray(analysis.tasks) &&
       analysis.tasks.length > 0
     ) {
-      await createTasksFromAi(activeUserId, contact.id, analysis.tasks);
-      console.log(`Tasks created: ${analysis.tasks?.length ?? 0}`);
+      await createTasksFromAi(userId, contactId, analysis.tasks);
+      console.log(`Tasks created: ${analysis.tasks.length}`);
     }
-
-    res.status(200).json({ success: true, analysis });
   } catch (error) {
-    console.error("Controller Error:", error);
-    res.status(500).json({ success: false });
+    console.error(`Analysis failed for call ${callId}:`, error);
+    await callService.markAnalysisFailed(callId);
   }
 };
