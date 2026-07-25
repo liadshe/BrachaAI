@@ -15,7 +15,6 @@ apiClient.interceptors.request.use((config) => {
     return Promise.reject(error);
 });
 
-// Optional: Handle 401 Unauthorized globally by logging out the user
 apiClient.interceptors.response.use((response) => {
     return response;
 }, (error) => {
@@ -23,6 +22,7 @@ apiClient.interceptors.response.use((response) => {
         console.warn('Unauthorized request. Logging out user.');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        window.BrachaNative?.clearAuth();
         window.location.href = '/login';
     }
     return Promise.reject(error);
