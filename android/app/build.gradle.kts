@@ -75,4 +75,6 @@ dependencies {
     implementation("io.github.maxrave-dev:ffmpeg-kit-audio:6.0.1")
     // for using webview
     implementation("androidx.webkit:webkit:1.11.0")
+    // encrypted storage for the auth token
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }
