@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
                 if (permissionsGranted && allFilesGranted) {
                     WebViewScreen(
                         url = "file:///android_asset/www/index.html",
-                        onAuthenticated = { android.util.Log.d("MainActivity", "Auth token received") }
+                        onAuthenticated = { CallMonitorService.requestFlush(this@MainActivity) }
                     ) { wv ->
                         webView = wv
                     }
