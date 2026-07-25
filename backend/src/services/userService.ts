@@ -1,18 +1,46 @@
 import Contact from '../models/Contact';
 
-export const getOrCreateContact = async (userId: string, contactName: string) => {
+export const PLACEHOLDER_PHONE = '000-000-000';
 
-    // Check if the contact already exists for this specific business owner
-    let contact = await Contact.findOne({ userId, name: contactName });
+/** Digits only, preserving a leading '+'. Returns null for unusable input. */
+const normalizePhone = (raw?: string | null): string | null => {
+    if (!raw) return null;
+    const trimmed = String(raw).trim();
+    const prefix = trimmed.startsWith('+') ? '+' : '';
+    const digits = trimmed.replace(/\D/g, '');
+    return digits ? prefix + digits : null;
+};
 
-    if (!contact) {
-        contact = await Contact.create({
-            userId,
-            name: contactName,
-            phone: "000-000-000", // Placeholder until we get real Caller ID
-            isVip: false
-        });
-        console.log(`👤 Created new contact: ${contactName}`);
+export const getOrCreateContact = async (
+    userId: string,
+    contactName: string,
+    callerNumber: string | null = null,
+) => {
+    const phone = normalizePhone(callerNumber);
+
+    // Phone is the strongest identifier — prefer it over the recorded name.
+    if (phone) {
+        const byPhone = await Contact.findOne({ userId, phone });
+        if (byPhone) return byPhone;
     }
-    return contact;
+
+    const byName = await Contact.findOne({ userId, name: contactName });
+    if (byName) {
+        // Backfill a real number over the placeholder, but never overwrite a known one.
+        if (phone && byName.phone === PLACEHOLDER_PHONE) {
+            byName.phone = phone;
+            await byName.save();
+            console.log(`Backfilled phone for contact ${contactName}`);
+        }
+        return byName;
+    }
+
+    const created = await Contact.create({
+        userId,
+        name: contactName,
+        phone: phone ?? PLACEHOLDER_PHONE, // schema requires a phone
+        isVip: false,
+    });
+    console.log(`Created new contact: ${contactName}`);
+    return created;
 };
