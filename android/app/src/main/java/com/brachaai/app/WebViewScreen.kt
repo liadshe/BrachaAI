@@ -12,8 +12,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 
 @Composable
-fun WebViewScreen(url: String, onWebViewCreated: (WebView) -> Unit = {}) {
-    // ADDED modifier = Modifier.fillMaxSize() HERE
+fun WebViewScreen(
+    url: String,
+    onAuthenticated: () -> Unit = {},
+    onWebViewCreated: (WebView) -> Unit = {}
+) {
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
@@ -28,6 +31,7 @@ fun WebViewScreen(url: String, onWebViewCreated: (WebView) -> Unit = {}) {
                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
                 }
+                addJavascriptInterface(AuthBridge(context, onAuthenticated), AuthBridge.JS_NAME)
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView, url: String) {
                         Log.d("WebView", "Page loaded: $url")

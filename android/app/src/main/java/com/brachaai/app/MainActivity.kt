@@ -67,7 +67,10 @@ class MainActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.Center
             ) {
                 if (permissionsGranted && allFilesGranted) {
-                    WebViewScreen(url = "file:///android_asset/www/index.html") { wv ->
+                    WebViewScreen(
+                        url = "file:///android_asset/www/index.html",
+                        onAuthenticated = { android.util.Log.d("MainActivity", "Auth token received") }
+                    ) { wv ->
                         webView = wv
                     }
                 } else if (!allFilesGranted) {
