@@ -147,6 +147,17 @@
     color: #7c3aed;
 }
 
+.amberIcon {
+    background-color: #fffbeb;
+    color: #d97706;
+}
+
+/* Call Settings is the first card with more than one row; without this the two rows
+   run together. Only applies where a sibling exists, so single-row cards are unchanged. */
+.settingItem + .settingItem {
+    border-top: 1px solid #f1f5f9;
+}
+
 .settingText {
     display: flex;
     flex-direction: column;

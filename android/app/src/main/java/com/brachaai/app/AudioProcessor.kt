@@ -20,7 +20,8 @@ class AudioProcessor(
     private val cacheDir: File,
     private val authStore: AuthStore,
     private val pendingStore: PendingUploadStore,
-    private val callerLookup: CallerLookup
+    private val callerLookup: CallerLookup,
+    private val settingsStore: SettingsStore
 ) {
 
     private val whisperClient = WhisperApiClient(openAiApiKey)
@@ -51,6 +52,10 @@ class AudioProcessor(
 
     suspend fun processAndSendToBackend(audioFile: File) {
         withContext(Dispatchers.IO) {
+            // Held outside the try so the finally can always clean it up. Previously the
+            // delete sat on the happy path only, so any throw below leaked the MP3 in
+            // cacheDir permanently.
+            var mp3File: File? = null
             try {
                 println("1. Starting processing for: ${audioFile.name}")
 
@@ -58,15 +63,16 @@ class AudioProcessor(
                 println("2. Parsed Info - Name: ${parsedInfo.contactName}, Date: ${parsedInfo.date}")
 
                 println("3. Converting audio to true MP3 format...")
-                val mp3File = convertToMp3(audioFile)
+                val converted = convertToMp3(audioFile)
 
-                if (mp3File == null) {
+                if (converted == null) {
                     println("ERROR: Audio conversion failed. Stopping process.")
                     return@withContext
                 }
+                mp3File = converted
 
                 println("4. Uploading MP3 to Whisper...")
-                val transcriptText = whisperClient.transcribeAudio(mp3File)
+                val transcriptText = whisperClient.transcribeAudio(converted)
                 println("5. Whisper Transcript: $transcriptText")
 
                 println("6. Correcting spelling and grammar...")
@@ -79,6 +85,8 @@ class AudioProcessor(
                     // which is non-retryable and gets permanently deleted. Stop here instead
                     // so nothing is ever uploaded or queued, and surface it via the existing
                     // error-notification path (handleNewFile's catch in CallMonitorService).
+                    // Throwing here also means the recording survives, since the deletion
+                    // below is never reached.
                     Log.e(TAG, "Corrected transcript is blank for ${audioFile.name}; not uploading or queuing")
                     throw IllegalStateException("Transcript came back blank for ${audioFile.name}; not uploaded")
                 }
@@ -94,7 +102,14 @@ class AudioProcessor(
                 )
 
                 println("9. Sending data to backend...")
-                when (attemptUpload(payload)) {
+                // Tracks whether the transcript actually landed somewhere durable. Starts
+                // true (Success/Rejected both leave the transcript durable, or moot in the
+                // Rejected case); the queued branch below defers to
+                // queuedTranscriptIsDurable, which flips it to false whenever the queue is
+                // not a trustworthy home for this transcript.
+                var transcriptIsDurable = true
+                val uploadResult = attemptUpload(payload)
+                when (uploadResult) {
                     is UploadResult.Success -> {
                         println("SUCCESS! Data sent to backend")
                         // Network and token both just proved good — this is the best
@@ -105,21 +120,120 @@ class AudioProcessor(
                     is UploadResult.Rejected -> {
                         Log.e(TAG, "Backend permanently rejected upload for ${audioFile.name}; dropping, will not retry")
                     }
-                    else -> {
+                    is UploadResult.Unauthenticated, is UploadResult.Transient -> {
                         println("Upload failed; queued for retry")
-                        pendingStore.enqueue(payload)
+                        val queued = pendingStore.enqueue(payload)
+                        transcriptIsDurable = queuedTranscriptIsDurable(
+                            enqueued = queued,
+                            wasUnauthenticated = uploadResult is UploadResult.Unauthenticated
+                        )
                     }
                 }
 
-                if (mp3File.exists()) {
-                    mp3File.delete()
+                if (transcriptIsDurable) {
+                    // The transcript is durable in every branch that reaches here: the
+                    // backend took it, PendingUploadStore actually wrote it to disk for
+                    // retry, or it was permanently rejected (in which case re-processing the
+                    // same audio would produce the same transcript and the same rejection).
+                    // The recording has no further use, so honour the user's storage setting.
+                    deleteOriginalIfEnabled(audioFile)
+                } else {
+                    println("Keeping ${audioFile.name}; no durable copy of its transcript exists")
                 }
 
             } catch (e: Exception) {
                 println("Error during processing: ${e.message}")
                 e.printStackTrace()
                 throw e
+            } finally {
+                val temp = mp3File
+                try {
+                    if (temp != null && temp.exists() && !temp.delete()) {
+                        Log.w(TAG, "Could not delete temp MP3 ${temp.name}")
+                    }
+                } catch (e: Exception) {
+                    // Must never replace an in-flight exception, or turn an otherwise-clean
+                    // run into an error notification, over a best-effort cache cleanup.
+                    Log.w(TAG, "Could not delete temp MP3 ${temp?.name}", e)
+                }
             }
+        }
+    }
+
+    /**
+     * Decides whether a transcript that could only be *queued* — not delivered — counts as
+     * durable enough to justify deleting the recording it came from.
+     *
+     * The recording is the only re-processable artifact; a queue entry is merely a promise
+     * of a later retry. Three ways that promise breaks, each of which means the recording
+     * must be kept:
+     *
+     * 1. **The queue write failed.** [PendingUploadStore.enqueue] bails out (and logs why)
+     *    on temp-file write failure, rename failure, or any other exception — realistically
+     *    a full or failing disk. Nothing was persisted anywhere.
+     * 2. **The queue is at capacity.** The next [PendingUploadStore.enqueue] runs
+     *    `evictOverflow()`, which permanently destroys the oldest entries once the queue
+     *    passes [PendingUploadStore.MAX_ENTRIES]. Whatever it destroys will be a call whose
+     *    recording is already gone, so once we are at the cap we stop trading recordings
+     *    for queue slots.
+     * 3. **We have never held a token.** "It will be retried after login" assumes a login
+     *    that may never happen: `CallMonitorService` starts as soon as permissions are
+     *    granted, independent of login, and `BootReceiver` restarts it — so an install that
+     *    is never signed into would otherwise transcribe, queue and delete every call
+     *    forever until the 30-day eviction wipes the lot.
+     *
+     * A genuinely transient failure with a token on file (network down, backend 5xx) is
+     * still treated as durable, as before: the retry is realistic and the queue drains.
+     *
+     * `internal` (not `private`) so the unit tests in this module can drive it directly
+     * with real collaborators, without a mocking framework.
+     */
+    internal fun queuedTranscriptIsDurable(enqueued: Boolean, wasUnauthenticated: Boolean): Boolean {
+        if (!enqueued) {
+            Log.w(TAG, "Failed to durably queue upload; keeping recording since no copy of the transcript was persisted")
+            return false
+        }
+        if (wasUnauthenticated && !authStore.hasEverAuthenticated()) {
+            Log.w(TAG, "Queued while no token has ever been stored; keeping recording since the login that would flush this queue may never happen")
+            return false
+        }
+        val size = pendingStore.size()
+        if (size >= PendingUploadStore.MAX_ENTRIES) {
+            Log.w(TAG, "Pending queue at capacity ($size/${PendingUploadStore.MAX_ENTRIES}); keeping recording since the next queued upload will destroy a transcript")
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Removes the original call recording, if the user has left "delete audio after
+     * processing" on (the default).
+     *
+     * Never throws. By the time this runs the transcript has already been delivered or
+     * queued, so failing to reclaim storage must not fail the pipeline or trigger the
+     * error notification in CallMonitorService.handleNewFile. The flag read is inside the
+     * try too: a corrupt/unreadable SharedPreferences backing file can surface as an
+     * IllegalStateException from the getter, and that must not escape either.
+     *
+     * `internal` (not `private`) so the unit test in this module's test source set can
+     * drive it directly without a mocking framework.
+     */
+    internal fun deleteOriginalIfEnabled(audioFile: File) {
+        try {
+            if (!settingsStore.deleteAudioAfterProcessing) {
+                println("Keeping ${audioFile.name}; delete-after-processing is off")
+                return
+            }
+            when {
+                !audioFile.exists() ->
+                    Log.w(TAG, "Original recording ${audioFile.name} is already gone")
+                audioFile.delete() ->
+                    println("Deleted original recording ${audioFile.name}")
+                else ->
+                    Log.w(TAG, "Could not delete original recording ${audioFile.name}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not delete original recording ${audioFile.name}", e)
         }
     }
 
@@ -229,6 +343,11 @@ class AudioProcessor(
             outputFile
         } else {
             println("Conversion Failed! FFmpeg logs: ${session.failStackTrace}")
+            // FFmpeg may have written a truncated file before failing. The caller gets
+            // null and never sees this path, so clean it up here.
+            if (outputFile.exists()) {
+                outputFile.delete()
+            }
             null
         }
     }

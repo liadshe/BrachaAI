@@ -34,7 +34,8 @@ class CallMonitorService : Service() {
             cacheDir = cacheDir,
             authStore = AuthStore(this),
             pendingStore = PendingUploadStore(File(filesDir, "pending")),
-            callerLookup = CallerLookup(this)
+            callerLookup = CallerLookup(this),
+            settingsStore = SettingsStore(this)
         )
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannels()

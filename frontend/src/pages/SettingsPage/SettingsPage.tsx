@@ -9,12 +9,23 @@ const SettingsPage: React.FC = () => {
     const [user, setUser] = useState<any>(JSON.parse(localStorage.getItem('user') || '{}'));
     const [googleCalendarSync, setGoogleCalendarSync] = useState(user.settings?.googleCalendarSync || false);
     const [autoCallRecording, setAutoCallRecording] = useState(user.settings?.autoCallRecording || false);
+    const [deleteAudioAfterProcessing, setDeleteAudioAfterProcessing] = useState(true);
+    const [audioSettingSupported, setAudioSettingSupported] = useState(false);
 
     useEffect(() => {
         const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
         setUser(storedUser);
         setGoogleCalendarSync(storedUser.settings?.googleCalendarSync || false);
         setAutoCallRecording(storedUser.settings?.autoCallRecording || false);
+
+        // Native-only setting: the Android host owns it so the background call-processing
+        // service can read it offline and before login. Absent in a plain browser, where
+        // there are no device recordings to delete.
+        const bridge = window.BrachaNative;
+        if (bridge?.getDeleteAudioAfterProcessing && bridge.setDeleteAudioAfterProcessing) {
+            setAudioSettingSupported(true);
+            setDeleteAudioAfterProcessing(bridge.getDeleteAudioAfterProcessing());
+        }
     }, []);
 
     const handleToggle = async (setting: string, value: boolean) => {
@@ -35,6 +46,13 @@ const SettingsPage: React.FC = () => {
         } catch (error) {
             console.error('Error updating settings:', error);
         }
+    };
+
+    // Deliberately not routed through handleToggle: this setting lives in Android
+    // SharedPreferences, not in the backend user record, so it must not PUT /auth/profile.
+    const handleDeleteAudioToggle = (value: boolean) => {
+        setDeleteAudioAfterProcessing(value);
+        window.BrachaNative?.setDeleteAudioAfterProcessing?.(value);
     };
 
     const formatPhoneNumber = (phone: string) => {
@@ -147,6 +165,33 @@ const SettingsPage: React.FC = () => {
                                 <span className={styles.slider}></span>
                             </label>
                         </div>
+                        {audioSettingSupported && (
+                            <div className={styles.settingItem}>
+                                <div className={styles.settingInfo}>
+                                    <div className={`${styles.iconBox} ${styles.amberIcon}`}>
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M3 6h18" />
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                                            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                            <line x1="10" x2="10" y1="11" y2="17" />
+                                            <line x1="14" x2="14" y1="11" y2="17" />
+                                        </svg>
+                                    </div>
+                                    <div className={styles.settingText}>
+                                        <span className={styles.settingName}>Delete Audio After Processing</span>
+                                        <span className={styles.settingDescription}>Free up storage by removing recordings once transcribed</span>
+                                    </div>
+                                </div>
+                                <label className={styles.switch}>
+                                    <input
+                                        type="checkbox"
+                                        checked={deleteAudioAfterProcessing}
+                                        onChange={(e) => handleDeleteAudioToggle(e.target.checked)}
+                                    />
+                                    <span className={styles.slider}></span>
+                                </label>
+                            </div>
+                        )}
                     </div>
                 </section>
 

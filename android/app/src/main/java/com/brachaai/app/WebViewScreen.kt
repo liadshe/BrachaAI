@@ -31,7 +31,7 @@ fun WebViewScreen(
                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
                 }
-                addJavascriptInterface(AuthBridge(context, onAuthenticated), AuthBridge.JS_NAME)
+                addJavascriptInterface(NativeBridge(context, onAuthenticated), NativeBridge.JS_NAME)
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView, url: String) {
                         Log.d("WebView", "Page loaded: $url")

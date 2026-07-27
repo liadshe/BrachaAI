@@ -4,6 +4,12 @@ declare global {
   interface BrachaNativeBridge {
     setAuth(token: string): void;
     clearAuth(): void;
+    /**
+     * Device-local storage settings. Optional because the committed web bundle can run
+     * inside an older APK whose bridge predates them.
+     */
+    getDeleteAudioAfterProcessing?(): boolean;
+    setDeleteAudioAfterProcessing?(enabled: boolean): void;
   }
 
   interface Window {

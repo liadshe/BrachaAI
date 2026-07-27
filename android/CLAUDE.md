@@ -19,6 +19,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew clean
 ```
 
+### Web UI assets
+
+`app/src/main/assets/www/` is a **checked-in build artifact** of `frontend/`, not source. To
+change the WebView UI: edit `frontend/`, run `npm run build` there, copy the contents of
+`frontend/dist/` over `android/app/src/main/assets/www/`, and commit the result — otherwise
+the app ships the previous bundle. `.github/workflows/build-and-copy.yml` does the same copy
+on push. There is deliberately no Gradle task for it.
+
 ## Local Setup
 
 The app requires an OpenAI API key. Add to `local.properties` (not committed):
@@ -47,9 +55,9 @@ Single-module Android app (`app`). `MainActivity` hosts a WebView (`WebViewScree
 
 4. **`MainActivity.kt`** — Hosts the WebView and gates it on runtime permissions (media/notifications, plus "all files access" on API 30+) and "all files access". `READ_CALL_LOG` is requested opportunistically for caller-number lookups but does not gate the WebView, since the WebView is the only source of the auth token.
 
-5. **`AuthBridge.kt`** / **`AuthStore.kt`** — The web app owns login; `AuthBridge` is exposed to the WebView as `window.BrachaNative` so JS can push the JWT (`setAuth`) or clear it (`clearAuth`) into native code. `AuthStore` persists the token in `EncryptedSharedPreferences` — it's the only component that touches token storage, and it swallows read/write failures rather than throwing.
+5. **`NativeBridge.kt`** / **`AuthStore.kt`** / **`SettingsStore.kt`** — The web app owns login; `NativeBridge` is exposed to the WebView as `window.BrachaNative` so JS can push the JWT (`setAuth`) or clear it (`clearAuth`) into native code, and read/write the "delete audio after processing" setting. `AuthStore` persists the token in `EncryptedSharedPreferences` — it's the only component that touches token storage, and it swallows read/write failures rather than throwing; it also records (in plain prefs) whether a token has *ever* been stored, which the pipeline uses to decide whether deleting a recording is safe. `SettingsStore` owns device-local settings in plain SharedPreferences.
 
-6. **`PendingUploadStore.kt`** — Durable on-disk queue (one JSON file per entry under app-private storage) for uploads that couldn't be delivered. Flushed on successful upload, on fresh auth, and via `CallMonitorService.requestFlush()`. Entries older than 30 days or beyond 200 entries are evicted.
+6. **`PendingUploadStore.kt`** — Durable on-disk queue (one JSON file per entry under app-private storage) for uploads that couldn't be delivered. Flushed on successful upload, on fresh auth, and via `CallMonitorService.requestFlush()`. Entries older than 30 days or beyond 200 entries are evicted — which now means permanent data loss, since the recording is deleted once its transcript is queued, so `AudioProcessor.queuedTranscriptIsDurable` keeps the recording whenever the queue is at capacity, the queue write failed, or no token has ever been stored. Unparseable entries are renamed aside to `*.corrupt` rather than deleted, so the transcript stays recoverable by hand.
 
 ## Key Details
 
