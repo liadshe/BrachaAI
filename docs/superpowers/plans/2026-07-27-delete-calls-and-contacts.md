@@ -387,7 +387,10 @@ const makeRes = () => {
     return res;
 };
 
-const makeReq = (body: any, userId: string | undefined = USER_ID) =>
+// The unauthenticated case passes null, not undefined: an explicit
+// `undefined` argument triggers the default parameter, which would silently
+// hand back an authenticated request and make the 401 test assert nothing.
+const makeReq = (body: any, userId: string | null = USER_ID) =>
     ({ body, user: userId ? { id: userId } : undefined }) as any;
 
 describe('bulkDeleteCalls', () => {
@@ -445,7 +448,7 @@ describe('bulkDeleteCalls', () => {
     it('returns 401 when there is no authenticated user', async () => {
         const res = makeRes();
 
-        await bulkDeleteCalls(makeReq({ ids: [CALL_A] }, undefined), res);
+        await bulkDeleteCalls(makeReq({ ids: [CALL_A] }, null), res);
 
         expect(res.status).toHaveBeenCalledWith(401);
         expect(callService.deleteCallsByIds).not.toHaveBeenCalled();
@@ -722,7 +725,10 @@ const makeRes = () => {
     return res;
 };
 
-const makeReq = (id: string, userId: string | undefined = USER_ID) =>
+// The unauthenticated case passes null, not undefined: an explicit
+// `undefined` argument triggers the default parameter, which would silently
+// hand back an authenticated request and make the 401 test assert nothing.
+const makeReq = (id: string, userId: string | null = USER_ID) =>
     ({ params: { id }, user: userId ? { id: userId } : undefined }) as any;
 
 describe('deleteContact', () => {
@@ -765,7 +771,7 @@ describe('deleteContact', () => {
     it('returns 401 when there is no authenticated user', async () => {
         const res = makeRes();
 
-        await deleteContact(makeReq(CONTACT_ID, undefined), res);
+        await deleteContact(makeReq(CONTACT_ID, null), res);
 
         expect(res.status).toHaveBeenCalledWith(401);
         expect(contactService.deleteContactCascade).not.toHaveBeenCalled();
