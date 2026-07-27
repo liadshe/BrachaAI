@@ -8,7 +8,7 @@ import androidx.security.crypto.MasterKey
 
 /**
  * Sole owner of auth token persistence. The token originates in the WebView's
- * localStorage and is pushed here via AuthBridge.
+ * localStorage and is pushed here via NativeBridge.
  */
 class AuthStore(context: Context) {
 
