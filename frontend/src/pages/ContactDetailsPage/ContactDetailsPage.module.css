@@ -557,3 +557,29 @@
 .selectionSpacer {
     height: 72px;
 }
+
+.headerTopRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.deleteContactBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    border-radius: 12px;
+    background-color: #fef2f2;
+    color: #dc2626;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.deleteContactBtn:hover {
+    background-color: #fee2e2;
+}

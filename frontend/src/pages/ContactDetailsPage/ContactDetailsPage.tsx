@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import apiClient from '../../services/apiClient';
 import BottomNav from '@/components/BottomNav';
 import SelectionBar from '@/components/SelectionBar';
@@ -40,6 +40,7 @@ interface Task {
 
 const ContactDetailsPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const [contact, setContact] = useState<Contact | null>(null);
     const [calls, setCalls] = useState<Call[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
@@ -57,6 +58,9 @@ const ContactDetailsPage: React.FC = () => {
 
     const callSelection = useMultiSelect();
     const [isDeleteCallsOpen, setIsDeleteCallsOpen] = useState(false);
+    const [isDeleteContactOpen, setIsDeleteContactOpen] = useState(false);
+    const [isDeletingContact, setIsDeletingContact] = useState(false);
+    const [contactError, setContactError] = useState<string | null>(null);
 
     useSelectionBackButton(callSelection.isSelecting, callSelection.clear);
 
@@ -98,6 +102,34 @@ const ContactDetailsPage: React.FC = () => {
         await callDeletion.deleteCalls(callSelection.selectedIds);
         callSelection.clear();
         setIsDeleteCallsOpen(false);
+    };
+
+    const contactDeleteMessage = () => {
+        const parts: string[] = [];
+        if (calls.length > 0) {
+            parts.push(`${calls.length} ${calls.length === 1 ? 'call' : 'calls'}`);
+        }
+        if (tasks.length > 0) {
+            parts.push(`${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'}`);
+        }
+        // Omit the clause entirely rather than saying "0 calls and 0 tasks".
+        const damage = parts.length > 0 ? `This also deletes ${parts.join(' and ')}. ` : '';
+        return `${damage}This can't be undone.`;
+    };
+
+    const handleDeleteContact = async () => {
+        setIsDeletingContact(true);
+        setContactError(null);
+
+        try {
+            await apiClient.delete(`/contacts/${id}`);
+            navigate('/contacts');
+        } catch (error) {
+            console.error('Error deleting contact:', error);
+            setContactError('Could not delete this contact. Please try again.');
+            setIsDeleteContactOpen(false);
+            setIsDeletingContact(false);
+        }
     };
 
     const toggleCallTranscript = (callId: string) => {
@@ -258,16 +290,31 @@ const ContactDetailsPage: React.FC = () => {
             )}
 
             {callDeletion.error && <p className={styles.statusMessage}>{callDeletion.error}</p>}
+            {contactError && <p className={styles.statusMessage}>{contactError}</p>}
 
             {/* Header section matching David Cohen details screen */}
             <div className={styles.header}>
-                <Link to="/contacts" className={styles.backLink}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="19" y1="12" x2="5" y2="12"></line>
-                        <polyline points="12 19 5 12 12 5"></polyline>
-                    </svg>
-                    <span>Back to Contacts</span>
-                </Link>
+                <div className={styles.headerTopRow}>
+                    <Link to="/contacts" className={styles.backLink}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="19" y1="12" x2="5" y2="12"></line>
+                            <polyline points="12 19 5 12 12 5"></polyline>
+                        </svg>
+                        <span>Back to Contacts</span>
+                    </Link>
+
+                    <button
+                        type="button"
+                        className={styles.deleteContactBtn}
+                        onClick={() => setIsDeleteContactOpen(true)}
+                        aria-label="Delete contact"
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                    </button>
+                </div>
 
                 <h1 className={styles.contactName}>{contact.name}</h1>
                 <div className={styles.phoneRow}>
@@ -498,6 +545,16 @@ const ContactDetailsPage: React.FC = () => {
                     busy={callDeletion.isDeleting}
                     onCancel={() => setIsDeleteCallsOpen(false)}
                     onConfirm={handleDeleteSelectedCalls}
+                />
+            )}
+
+            {isDeleteContactOpen && (
+                <ConfirmDialog
+                    title={`Delete ${contact.name}?`}
+                    message={contactDeleteMessage()}
+                    busy={isDeletingContact}
+                    onCancel={() => setIsDeleteContactOpen(false)}
+                    onConfirm={handleDeleteContact}
                 />
             )}
 
