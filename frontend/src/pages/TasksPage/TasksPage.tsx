@@ -227,6 +227,7 @@ const TasksPage: React.FC = () => {
                 </main>
             </div>
 
+            <BottomNav />
             {/* Edit Task Modal */}
             {isEditModalOpen && (
                 <div className={styles.modalOverlay}>
@@ -306,7 +307,6 @@ const TasksPage: React.FC = () => {
                 </div>
             )}
 
-            <BottomNav />
         </div>
     );
 };
