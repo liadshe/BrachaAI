@@ -104,10 +104,12 @@ class AudioProcessor(
                 println("9. Sending data to backend...")
                 // Tracks whether the transcript actually landed somewhere durable. Starts
                 // true (Success/Rejected both leave the transcript durable, or moot in the
-                // Rejected case); the queued branch below flips it to false if the durable
-                // queue write itself failed, since then nothing survives but this recording.
+                // Rejected case); the queued branch below defers to
+                // queuedTranscriptIsDurable, which flips it to false whenever the queue is
+                // not a trustworthy home for this transcript.
                 var transcriptIsDurable = true
-                when (attemptUpload(payload)) {
+                val uploadResult = attemptUpload(payload)
+                when (uploadResult) {
                     is UploadResult.Success -> {
                         println("SUCCESS! Data sent to backend")
                         // Network and token both just proved good — this is the best
@@ -118,18 +120,13 @@ class AudioProcessor(
                     is UploadResult.Rejected -> {
                         Log.e(TAG, "Backend permanently rejected upload for ${audioFile.name}; dropping, will not retry")
                     }
-                    else -> {
+                    is UploadResult.Unauthenticated, is UploadResult.Transient -> {
                         println("Upload failed; queued for retry")
                         val queued = pendingStore.enqueue(payload)
-                        if (!queued) {
-                            // enqueue bails out (and logs why) on temp-file write failure,
-                            // rename failure, or any other exception — realistically a full
-                            // or failing disk. The transcript is not on disk anywhere, so the
-                            // recording is the only re-processable copy left; it must not be
-                            // deleted just because we already tried.
-                            transcriptIsDurable = false
-                            Log.w(TAG, "Failed to durably queue upload for ${audioFile.name}; keeping recording since no copy of the transcript was persisted")
-                        }
+                        transcriptIsDurable = queuedTranscriptIsDurable(
+                            enqueued = queued,
+                            wasUnauthenticated = uploadResult is UploadResult.Unauthenticated
+                        )
                     }
                 }
 
@@ -161,6 +158,51 @@ class AudioProcessor(
                 }
             }
         }
+    }
+
+    /**
+     * Decides whether a transcript that could only be *queued* — not delivered — counts as
+     * durable enough to justify deleting the recording it came from.
+     *
+     * The recording is the only re-processable artifact; a queue entry is merely a promise
+     * of a later retry. Three ways that promise breaks, each of which means the recording
+     * must be kept:
+     *
+     * 1. **The queue write failed.** [PendingUploadStore.enqueue] bails out (and logs why)
+     *    on temp-file write failure, rename failure, or any other exception — realistically
+     *    a full or failing disk. Nothing was persisted anywhere.
+     * 2. **The queue is at capacity.** The next [PendingUploadStore.enqueue] runs
+     *    `evictOverflow()`, which permanently destroys the oldest entries once the queue
+     *    passes [PendingUploadStore.MAX_ENTRIES]. Whatever it destroys will be a call whose
+     *    recording is already gone, so once we are at the cap we stop trading recordings
+     *    for queue slots.
+     * 3. **We have never held a token.** "It will be retried after login" assumes a login
+     *    that may never happen: `CallMonitorService` starts as soon as permissions are
+     *    granted, independent of login, and `BootReceiver` restarts it — so an install that
+     *    is never signed into would otherwise transcribe, queue and delete every call
+     *    forever until the 30-day eviction wipes the lot.
+     *
+     * A genuinely transient failure with a token on file (network down, backend 5xx) is
+     * still treated as durable, as before: the retry is realistic and the queue drains.
+     *
+     * `internal` (not `private`) so the unit tests in this module can drive it directly
+     * with real collaborators, without a mocking framework.
+     */
+    internal fun queuedTranscriptIsDurable(enqueued: Boolean, wasUnauthenticated: Boolean): Boolean {
+        if (!enqueued) {
+            Log.w(TAG, "Failed to durably queue upload; keeping recording since no copy of the transcript was persisted")
+            return false
+        }
+        if (wasUnauthenticated && !authStore.hasEverAuthenticated()) {
+            Log.w(TAG, "Queued while no token has ever been stored; keeping recording since the login that would flush this queue may never happen")
+            return false
+        }
+        val size = pendingStore.size()
+        if (size >= PendingUploadStore.MAX_ENTRIES) {
+            Log.w(TAG, "Pending queue at capacity ($size/${PendingUploadStore.MAX_ENTRIES}); keeping recording since the next queued upload will destroy a transcript")
+            return false
+        }
+        return true
     }
 
     /**
