@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import apiClient from '../../services/apiClient';
 import BottomNav from '@/components/BottomNav';
+import SelectionBar from '@/components/SelectionBar';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { useMultiSelect } from '@/hooks/useMultiSelect';
+import { useSelectionBackButton } from '@/hooks/useSelectionBackButton';
+import { useCallDeletion } from '@/hooks/useCallDeletion';
 import styles from './ContactDetailsPage.module.css';
 
 interface Contact {
@@ -50,6 +55,21 @@ const ContactDetailsPage: React.FC = () => {
     const [editPriority, setEditPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
     const [editDueDate, setEditDueDate] = useState('');
 
+    const callSelection = useMultiSelect();
+    const [isDeleteCallsOpen, setIsDeleteCallsOpen] = useState(false);
+
+    useSelectionBackButton(callSelection.isSelecting, callSelection.clear);
+
+    const callDeletion = useCallDeletion({
+        onDeleted: (deletedIds) => {
+            setCalls(prev => prev.filter(call => !deletedIds.has(call._id)));
+        },
+        onRefetch: async () => {
+            const callsRes = await apiClient.get('/calls');
+            setCalls(callsRes.data.filter((c: any) => c.contactId?._id === id));
+        },
+    });
+
     useEffect(() => {
         const fetchDetails = async () => {
             try {
@@ -73,6 +93,12 @@ const ContactDetailsPage: React.FC = () => {
         };
         fetchDetails();
     }, [id]);
+
+    const handleDeleteSelectedCalls = async () => {
+        await callDeletion.deleteCalls(callSelection.selectedIds);
+        callSelection.clear();
+        setIsDeleteCallsOpen(false);
+    };
 
     const toggleCallTranscript = (callId: string) => {
         setExpandedCallIds(prev => {
@@ -220,6 +246,19 @@ const ContactDetailsPage: React.FC = () => {
 
     return (
         <div className={styles.pageWrapper}>
+            {callSelection.isSelecting && (
+                <>
+                    <SelectionBar
+                        count={callSelection.count}
+                        onCancel={callSelection.clear}
+                        onDelete={() => setIsDeleteCallsOpen(true)}
+                    />
+                    <div className={styles.selectionSpacer} />
+                </>
+            )}
+
+            {callDeletion.error && <p className={styles.statusMessage}>{callDeletion.error}</p>}
+
             {/* Header section matching David Cohen details screen */}
             <div className={styles.header}>
                 <Link to="/contacts" className={styles.backLink}>
@@ -262,7 +301,11 @@ const ContactDetailsPage: React.FC = () => {
                             calls.map((call) => {
                                 const isExpanded = expandedCallIds.has(call._id);
                                 return (
-                                    <div key={call._id} className={styles.callCard}>
+                                    <div
+                                        key={call._id}
+                                        className={`${styles.callCard} ${styles.selectableCard} ${callSelection.isSelected(call._id) ? styles.selectedCard : ''}`}
+                                        {...callSelection.getItemProps(call._id)}
+                                    >
                                         <div className={styles.callHeader}>
                                             <div className={styles.callTypeSection}>
                                                 <div className={styles.callIconBox}>
@@ -280,8 +323,12 @@ const ContactDetailsPage: React.FC = () => {
 
                                         <p className={styles.callSummary}>{call.callSummary || 'No summary available.'}</p>
 
-                                        <button 
-                                            onClick={() => toggleCallTranscript(call._id)} 
+                                        <button
+                                            onClick={(e) => {
+                                                if (callSelection.isSelecting) return;
+                                                e.stopPropagation();
+                                                toggleCallTranscript(call._id);
+                                            }}
                                             className={styles.viewTranscriptBtn}
                                         >
                                             {isExpanded ? 'Hide transcript' : 'View transcript'} &rarr;
@@ -442,6 +489,16 @@ const ContactDetailsPage: React.FC = () => {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {isDeleteCallsOpen && (
+                <ConfirmDialog
+                    title={`Delete ${callSelection.count} ${callSelection.count === 1 ? 'call' : 'calls'}?`}
+                    message="This can't be undone."
+                    busy={callDeletion.isDeleting}
+                    onCancel={() => setIsDeleteCallsOpen(false)}
+                    onConfirm={handleDeleteSelectedCalls}
+                />
             )}
 
             <BottomNav />

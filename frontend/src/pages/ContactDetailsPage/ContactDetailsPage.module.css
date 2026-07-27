@@ -536,3 +536,24 @@
 .saveBtn:hover {
     background-color: #1d4ed8;
 }
+
+/* Long-press multi-select.
+   Without the callout/user-select suppression, a long press inside the Android
+   WebView raises the native "Copy / Select all" popup and the text magnifier
+   instead of entering selection mode. This works in desktop Chrome without
+   these properties and fails on device. */
+.selectableCard {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: pointer;
+}
+
+.selectedCard {
+    border-color: #2563eb;
+    background-color: #eff6ff;
+}
+
+.selectionSpacer {
+    height: 72px;
+}
