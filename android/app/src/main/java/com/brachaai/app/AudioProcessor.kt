@@ -102,6 +102,11 @@ class AudioProcessor(
                 )
 
                 println("9. Sending data to backend...")
+                // Tracks whether the transcript actually landed somewhere durable. Starts
+                // true (Success/Rejected both leave the transcript durable, or moot in the
+                // Rejected case); the queued branch below flips it to false if the durable
+                // queue write itself failed, since then nothing survives but this recording.
+                var transcriptIsDurable = true
                 when (attemptUpload(payload)) {
                     is UploadResult.Success -> {
                         println("SUCCESS! Data sent to backend")
@@ -115,16 +120,29 @@ class AudioProcessor(
                     }
                     else -> {
                         println("Upload failed; queued for retry")
-                        pendingStore.enqueue(payload)
+                        val queued = pendingStore.enqueue(payload)
+                        if (!queued) {
+                            // enqueue bails out (and logs why) on temp-file write failure,
+                            // rename failure, or any other exception — realistically a full
+                            // or failing disk. The transcript is not on disk anywhere, so the
+                            // recording is the only re-processable copy left; it must not be
+                            // deleted just because we already tried.
+                            transcriptIsDurable = false
+                            Log.w(TAG, "Failed to durably queue upload for ${audioFile.name}; keeping recording since no copy of the transcript was persisted")
+                        }
                     }
                 }
 
-                // The transcript is durable in every branch above: the backend took it, or
-                // PendingUploadStore wrote it to disk for retry, or it was permanently
-                // rejected (in which case re-processing the same audio would produce the
-                // same transcript and the same rejection). The recording has no further
-                // use, so honour the user's storage setting.
-                deleteOriginalIfEnabled(audioFile)
+                if (transcriptIsDurable) {
+                    // The transcript is durable in every branch that reaches here: the
+                    // backend took it, PendingUploadStore actually wrote it to disk for
+                    // retry, or it was permanently rejected (in which case re-processing the
+                    // same audio would produce the same transcript and the same rejection).
+                    // The recording has no further use, so honour the user's storage setting.
+                    deleteOriginalIfEnabled(audioFile)
+                } else {
+                    println("Keeping ${audioFile.name}; no durable copy of its transcript exists")
+                }
 
             } catch (e: Exception) {
                 println("Error during processing: ${e.message}")
@@ -132,8 +150,14 @@ class AudioProcessor(
                 throw e
             } finally {
                 val temp = mp3File
-                if (temp != null && temp.exists() && !temp.delete()) {
-                    Log.w(TAG, "Could not delete temp MP3 ${temp.name}")
+                try {
+                    if (temp != null && temp.exists() && !temp.delete()) {
+                        Log.w(TAG, "Could not delete temp MP3 ${temp.name}")
+                    }
+                } catch (e: Exception) {
+                    // Must never replace an in-flight exception, or turn an otherwise-clean
+                    // run into an error notification, over a best-effort cache cleanup.
+                    Log.w(TAG, "Could not delete temp MP3 ${temp?.name}", e)
                 }
             }
         }
@@ -145,14 +169,19 @@ class AudioProcessor(
      *
      * Never throws. By the time this runs the transcript has already been delivered or
      * queued, so failing to reclaim storage must not fail the pipeline or trigger the
-     * error notification in CallMonitorService.handleNewFile.
+     * error notification in CallMonitorService.handleNewFile. The flag read is inside the
+     * try too: a corrupt/unreadable SharedPreferences backing file can surface as an
+     * IllegalStateException from the getter, and that must not escape either.
+     *
+     * `internal` (not `private`) so the unit test in this module's test source set can
+     * drive it directly without a mocking framework.
      */
-    private fun deleteOriginalIfEnabled(audioFile: File) {
-        if (!settingsStore.deleteAudioAfterProcessing) {
-            println("Keeping ${audioFile.name}; delete-after-processing is off")
-            return
-        }
+    internal fun deleteOriginalIfEnabled(audioFile: File) {
         try {
+            if (!settingsStore.deleteAudioAfterProcessing) {
+                println("Keeping ${audioFile.name}; delete-after-processing is off")
+                return
+            }
             when {
                 !audioFile.exists() ->
                     Log.w(TAG, "Original recording ${audioFile.name} is already gone")

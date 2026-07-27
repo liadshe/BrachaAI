@@ -32,7 +32,15 @@ class PendingUploadStore(private val dir: File) {
         cleanupStaleTemps()
     }
 
-    fun enqueue(upload: PendingUpload) {
+    /**
+     * Persists [upload] to durable storage.
+     *
+     * @return `true` only when the entry is genuinely on disk under its final name;
+     * `false` at any bail-out point (temp-file write failure, rename failure, or any
+     * other exception). Callers that treat a queued upload as "the transcript is safe"
+     * must check this — a `false` here means it is not.
+     */
+    fun enqueue(upload: PendingUpload): Boolean {
         val json = JSONObject().apply {
             put("contactName", upload.contactName)
             put("date", upload.date)
@@ -49,7 +57,7 @@ class PendingUploadStore(private val dir: File) {
             tempFile.writeText(json.toString())
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write temp file for upload", e)
-            return
+            return false
         }
 
         // Atomic rename and eviction, protected by lock.
@@ -58,17 +66,18 @@ class PendingUploadStore(private val dir: File) {
                 if (!tempFile.renameTo(finalFile)) {
                     Log.e(TAG, "Failed to rename temp file to $name")
                     tempFile.delete()
-                    return
+                    return false
                 }
                 Log.d(TAG, "Queued upload $name; queue size = ${sizeUnlocked()}")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to finalize upload write", e)
                 tempFile.delete()
-                return
+                return false
             }
             evictOverflow()
             cleanupStaleTemps()
         }
+        return true
     }
 
     fun peekAll(): List<Pair<File, PendingUpload>> = lock.withLock {
