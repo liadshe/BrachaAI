@@ -2372,6 +2372,33 @@ git commit -m "chore: update Android assets with delete feature"
 
 ---
 
+## Status at hand-off (2026-07-27)
+
+All code is implemented, reviewed, and committed on branch `delete-call`. Backend 32/32 tests, frontend 21/21, build clean. A whole-branch review found no Critical issues and confirmed every delete query is scoped by `userId`; its four Important findings were fixed and re-reviewed.
+
+**Two things remain, both outside what could be automated:**
+
+### 1. The backend must be redeployed before deletes work on a device
+
+`frontend/.env` points at `VITE_API_URL=http://193.106.55.154:3000/api`. `POST /api/calls/bulk-delete` and `DELETE /api/contacts/:id` exist only on this branch. Until that server runs this code, the selection UI will work on device but confirming a delete returns 404, surfacing "Could not delete those calls. Please try again."
+
+So the device checks split in two: the gesture checks (1, 2, 3, 4, 7, 8 below) work now; the persistence checks (5, 6, 9) need the deploy first.
+
+### 2. The interactive device checks are outstanding
+
+The app is built, installed, and launching on `emulator-5554` with no crashes, but the checks below need an authenticated session with real call data. They have not been performed by anyone yet — Task 10's list is the authority.
+
+Reinstall after any frontend change with:
+
+```bash
+cd frontend && npm run build
+rm -rf ../android/app/src/main/assets/www/*
+cp -R dist/* ../android/app/src/main/assets/www/
+cd ../android && ./gradlew installDebug
+```
+
+Note that `.github/workflows/build-and-copy.yml` rebuilds and commits the Android assets on every push, so the committed bundle stays current without manual steps.
+
 ## Self-Review Notes
 
 **Spec coverage:**
