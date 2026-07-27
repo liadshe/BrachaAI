@@ -50,6 +50,12 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        unitTests {
+            // Robolectric needs the merged resources/manifest on the unit-test classpath.
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
@@ -62,6 +68,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     testImplementation(libs.junit)
+    // Real in-JVM Android framework, so SharedPreferences-backed settings are testable.
+    testImplementation("org.robolectric:robolectric:4.14.1")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
