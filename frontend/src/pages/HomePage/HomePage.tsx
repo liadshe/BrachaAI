@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../../services/apiClient';
 import BottomNav from '@/components/BottomNav';
+import SelectionBar from '@/components/SelectionBar';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { useMultiSelect } from '@/hooks/useMultiSelect';
+import { useSelectionBackButton } from '@/hooks/useSelectionBackButton';
+import { useCallDeletion } from '@/hooks/useCallDeletion';
 import styles from './HomePage.module.css';
 
 const HomePage: React.FC = () => {
@@ -9,6 +14,21 @@ const HomePage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+    const callSelection = useMultiSelect();
+    const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+
+    useSelectionBackButton(callSelection.isSelecting, callSelection.clear);
+
+    const callDeletion = useCallDeletion({
+        onDeleted: (deletedIds) => {
+            setCalls(prev => prev.filter(call => !deletedIds.has(call._id)));
+        },
+        onRefetch: async () => {
+            const callsRes = await apiClient.get('/calls');
+            setCalls(callsRes.data);
+        },
+    });
 
     useEffect(() => {
         const fetchData = async () => {
@@ -44,8 +64,25 @@ const HomePage: React.FC = () => {
         return contactName.includes(query) || summary.includes(query);
     });
 
+    const handleDeleteSelectedCalls = async () => {
+        await callDeletion.deleteCalls(callSelection.selectedIds);
+        callSelection.clear();
+        setIsDeleteOpen(false);
+    };
+
     return (
         <div className={styles.pageWrapper}>
+            {callSelection.isSelecting && (
+                <>
+                    <SelectionBar
+                        count={callSelection.count}
+                        onCancel={callSelection.clear}
+                        onDelete={() => setIsDeleteOpen(true)}
+                    />
+                    <div className={styles.selectionSpacer} />
+                </>
+            )}
+
             <div className={styles.contentArea}>
                 <header className={styles.header}>
                     <h1 className={styles.greeting}>{getGreeting()}, {user.name || 'User'}</h1>
@@ -119,6 +156,7 @@ const HomePage: React.FC = () => {
 
                     <section className={styles.section}>
                         <h2 className={styles.sectionTitle}>Recent Call Insights</h2>
+                        {callDeletion.error && <p className={styles.statusMessage}>{callDeletion.error}</p>}
                         <div className={styles.insightsList}>
                             {loading ? (
                                 <div className={styles.loadingPlaceholder}>
@@ -132,7 +170,11 @@ const HomePage: React.FC = () => {
                                 </div>
                             ) : filteredCalls.length > 0 ? (
                                 filteredCalls.map((call) => (
-                                    <div key={call._id} className={styles.insightItem}>
+                                    <div
+                                        key={call._id}
+                                        className={`${styles.insightItem} ${styles.selectableCard} ${callSelection.isSelected(call._id) ? styles.selectedCard : ''}`}
+                                        {...callSelection.getItemProps(call._id)}
+                                    >
                                         <div className={styles.insightHeader}>
                                             <div className={styles.callerInfo}>
                                                 <div className={styles.callIconBox}>
@@ -161,6 +203,16 @@ const HomePage: React.FC = () => {
                     </section>
                 </main>
             </div>
+
+            {isDeleteOpen && (
+                <ConfirmDialog
+                    title={`Delete ${callSelection.count} ${callSelection.count === 1 ? 'call' : 'calls'}?`}
+                    message="This can't be undone."
+                    busy={callDeletion.isDeleting}
+                    onCancel={() => setIsDeleteOpen(false)}
+                    onConfirm={handleDeleteSelectedCalls}
+                />
+            )}
 
             <BottomNav />
         </div>

@@ -235,3 +235,22 @@
 @media (max-width: 400px) {
     .statsNumber { font-size: 28px; }
 }
+
+/* Long-press multi-select. See the note in ContactDetailsPage.module.css:
+   without the callout/user-select suppression the Android WebView shows its
+   native text-selection popup instead of entering selection mode. */
+.selectableCard {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: pointer;
+}
+
+.selectedCard {
+    border-color: #2563eb;
+    background-color: #eff6ff;
+}
+
+.selectionSpacer {
+    height: 72px;
+}
