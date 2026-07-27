@@ -15,7 +15,6 @@ apiClient.interceptors.request.use((config) => {
     return Promise.reject(error);
 });
 
-// Optional: Handle 401 Unauthorized globally by logging out the user
 apiClient.interceptors.response.use((response) => {
     return response;
 }, (error) => {
@@ -23,7 +22,11 @@ apiClient.interceptors.response.use((response) => {
         console.warn('Unauthorized request. Logging out user.');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        window.BrachaNative?.clearAuth();
+        // The app runs from file:///android_asset/www/index.html under HashRouter, so a
+        // path-based redirect resolves to file:///login (ERR_FILE_NOT_FOUND) and dead-ends
+        // the app until it's force-stopped. Use a hash redirect instead.
+        window.location.hash = '#/login';
     }
     return Promise.reject(error);
 });

@@ -39,6 +39,11 @@ const CallSchema = new mongoose_1.Schema({
     contactId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Contact', required: true },
     fullTranscript: { type: String, required: true },
     callSummary: { type: String },
+    analysisStatus: {
+        type: String,
+        enum: ['pending', 'done', 'failed'],
+        default: 'pending',
+    },
     callDateTime: { type: Date, default: Date.now },
     callLength: { type: Number }, // in seconds
 });

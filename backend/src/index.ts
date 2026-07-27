@@ -17,7 +17,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 2. Middleware
-app.use(express.json());
+// Default 100kb limit truncates real call transcripts (a ~1hr Hebrew call is ~2 bytes/char
+// and comfortably exceeds 100kb), which the client treats as a permanent 413 rejection and
+// deletes on-device. Raise it so long transcripts aren't silently destroyed.
+app.use(express.json({ limit: '5mb' }));
 app.use(cors());
 
 // 3. Connect to MongoDB

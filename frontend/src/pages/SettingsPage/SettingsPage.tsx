@@ -180,6 +180,7 @@ const SettingsPage: React.FC = () => {
                         <button className={styles.menuItem} onClick={() => {
                             localStorage.removeItem('token');
                             localStorage.removeItem('user');
+                            window.BrachaNative?.clearAuth();
                             navigate('/login');
                         }}>
                             <div className={styles.settingInfo}>

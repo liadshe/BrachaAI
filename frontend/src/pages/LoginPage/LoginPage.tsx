@@ -25,6 +25,7 @@ const LoginPage: React.FC = () => {
       const { token, user } = response.data;
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
+      window.BrachaNative?.setAuth(token);
 
       navigate('/home');
     } catch (err: any) {

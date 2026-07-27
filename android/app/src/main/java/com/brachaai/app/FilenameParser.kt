@@ -26,3 +26,16 @@ fun parseFilename(filename: String): ParsedFile {
 
     return ParsedFile(contactName, date, time)
 }
+
+/**
+ * Converts the filename's date + time (YYMMDD + HHMMSS, device local time) into
+ * epoch millis. Returns null when the filename carried an unparseable stamp.
+ */
+fun ParsedFile.toEpochMillis(): Long? = try {
+    java.text.SimpleDateFormat("yyMMddHHmmss", java.util.Locale.US)
+        .apply { isLenient = false }
+        .parse(date + time)
+        ?.time
+} catch (e: Exception) {
+    null
+}
