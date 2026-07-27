@@ -20,7 +20,8 @@ class AudioProcessor(
     private val cacheDir: File,
     private val authStore: AuthStore,
     private val pendingStore: PendingUploadStore,
-    private val callerLookup: CallerLookup
+    private val callerLookup: CallerLookup,
+    private val settingsStore: SettingsStore
 ) {
 
     private val whisperClient = WhisperApiClient(openAiApiKey)
@@ -51,6 +52,10 @@ class AudioProcessor(
 
     suspend fun processAndSendToBackend(audioFile: File) {
         withContext(Dispatchers.IO) {
+            // Held outside the try so the finally can always clean it up. Previously the
+            // delete sat on the happy path only, so any throw below leaked the MP3 in
+            // cacheDir permanently.
+            var mp3File: File? = null
             try {
                 println("1. Starting processing for: ${audioFile.name}")
 
@@ -58,15 +63,16 @@ class AudioProcessor(
                 println("2. Parsed Info - Name: ${parsedInfo.contactName}, Date: ${parsedInfo.date}")
 
                 println("3. Converting audio to true MP3 format...")
-                val mp3File = convertToMp3(audioFile)
+                val converted = convertToMp3(audioFile)
 
-                if (mp3File == null) {
+                if (converted == null) {
                     println("ERROR: Audio conversion failed. Stopping process.")
                     return@withContext
                 }
+                mp3File = converted
 
                 println("4. Uploading MP3 to Whisper...")
-                val transcriptText = whisperClient.transcribeAudio(mp3File)
+                val transcriptText = whisperClient.transcribeAudio(converted)
                 println("5. Whisper Transcript: $transcriptText")
 
                 println("6. Correcting spelling and grammar...")
@@ -79,6 +85,8 @@ class AudioProcessor(
                     // which is non-retryable and gets permanently deleted. Stop here instead
                     // so nothing is ever uploaded or queued, and surface it via the existing
                     // error-notification path (handleNewFile's catch in CallMonitorService).
+                    // Throwing here also means the recording survives, since the deletion
+                    // below is never reached.
                     Log.e(TAG, "Corrected transcript is blank for ${audioFile.name}; not uploading or queuing")
                     throw IllegalStateException("Transcript came back blank for ${audioFile.name}; not uploaded")
                 }
@@ -111,15 +119,50 @@ class AudioProcessor(
                     }
                 }
 
-                if (mp3File.exists()) {
-                    mp3File.delete()
-                }
+                // The transcript is durable in every branch above: the backend took it, or
+                // PendingUploadStore wrote it to disk for retry, or it was permanently
+                // rejected (in which case re-processing the same audio would produce the
+                // same transcript and the same rejection). The recording has no further
+                // use, so honour the user's storage setting.
+                deleteOriginalIfEnabled(audioFile)
 
             } catch (e: Exception) {
                 println("Error during processing: ${e.message}")
                 e.printStackTrace()
                 throw e
+            } finally {
+                val temp = mp3File
+                if (temp != null && temp.exists() && !temp.delete()) {
+                    Log.w(TAG, "Could not delete temp MP3 ${temp.name}")
+                }
             }
+        }
+    }
+
+    /**
+     * Removes the original call recording, if the user has left "delete audio after
+     * processing" on (the default).
+     *
+     * Never throws. By the time this runs the transcript has already been delivered or
+     * queued, so failing to reclaim storage must not fail the pipeline or trigger the
+     * error notification in CallMonitorService.handleNewFile.
+     */
+    private fun deleteOriginalIfEnabled(audioFile: File) {
+        if (!settingsStore.deleteAudioAfterProcessing) {
+            println("Keeping ${audioFile.name}; delete-after-processing is off")
+            return
+        }
+        try {
+            when {
+                !audioFile.exists() ->
+                    Log.w(TAG, "Original recording ${audioFile.name} is already gone")
+                audioFile.delete() ->
+                    println("Deleted original recording ${audioFile.name}")
+                else ->
+                    Log.w(TAG, "Could not delete original recording ${audioFile.name}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not delete original recording ${audioFile.name}", e)
         }
     }
 
@@ -229,6 +272,11 @@ class AudioProcessor(
             outputFile
         } else {
             println("Conversion Failed! FFmpeg logs: ${session.failStackTrace}")
+            // FFmpeg may have written a truncated file before failing. The caller gets
+            // null and never sees this path, so clean it up here.
+            if (outputFile.exists()) {
+                outputFile.delete()
+            }
             null
         }
     }
