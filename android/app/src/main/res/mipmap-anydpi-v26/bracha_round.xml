@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/bracha_background"/>
+    <foreground android:drawable="@mipmap/bracha_foreground"/>
+    <monochrome android:drawable="@mipmap/bracha_foreground"/>
+</adaptive-icon>
