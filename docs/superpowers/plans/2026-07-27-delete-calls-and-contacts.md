@@ -250,7 +250,7 @@ export const validateObjectIdList = (value: unknown): IdListValidation => {
 - [ ] **Step 8: Run the test to verify it passes**
 
 Run: `cd backend && npm test`
-Expected: PASS — 13 tests.
+Expected: PASS — 12 tests.
 
 - [ ] **Step 9: Verify the production build still works**
 
@@ -516,7 +516,7 @@ Place the new route after the existing `router.get('/calls', ...)` line. Express
 - [ ] **Step 9: Run the full backend suite**
 
 Run: `cd backend && npm test`
-Expected: PASS — 23 tests total.
+Expected: PASS — 22 tests total (12 from Task 1, plus 3 service and 7 controller tests here).
 
 - [ ] **Step 10: Verify it compiles**
 
@@ -839,7 +839,7 @@ router.delete('/contacts/:id', protect, deleteContact);
 - [ ] **Step 9: Run the full backend suite**
 
 Run: `cd backend && npm test`
-Expected: PASS — 33 tests total.
+Expected: PASS — 32 tests total (22 from Tasks 1-2, plus 5 service and 5 controller tests here).
 
 - [ ] **Step 10: Verify it compiles**
 
