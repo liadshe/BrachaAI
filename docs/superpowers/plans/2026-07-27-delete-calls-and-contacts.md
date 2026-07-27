@@ -46,6 +46,8 @@
 - `frontend/src/hooks/useMultiSelect.ts` — long-press selection state machine
 - `frontend/src/hooks/useMultiSelect.test.ts`
 - `frontend/src/hooks/useSelectionBackButton.ts` — Android back button exits selection
+- `frontend/src/hooks/useCallDeletion.ts` — the bulk-delete request, count-mismatch check, and error/refetch recovery, shared by both pages
+- `frontend/src/hooks/useCallDeletion.test.ts`
 - `frontend/src/components/SelectionBar.tsx` + `.module.css`
 - `frontend/src/components/ConfirmDialog.tsx` + `.module.css`
 
@@ -1323,21 +1325,28 @@ git commit -m "feat: exit selection mode on back button"
 
 ---
 
-## Task 6: SelectionBar and ConfirmDialog components
+## Task 6: Shared delete UI and the call-deletion hook
 
 **Files:**
 - Create: `frontend/src/components/SelectionBar.tsx`
 - Create: `frontend/src/components/SelectionBar.module.css`
 - Create: `frontend/src/components/ConfirmDialog.tsx`
 - Create: `frontend/src/components/ConfirmDialog.module.css`
+- Create: `frontend/src/hooks/useCallDeletion.ts`
+- Test: `frontend/src/hooks/useCallDeletion.test.ts`
 
 **Interfaces:**
-- Consumes: nothing
+- Consumes: `POST /api/calls/bulk-delete` (Task 2)
 - Produces:
   - `SelectionBar` with props `{ count: number; onCancel: () => void; onDelete: () => void }`
   - `ConfirmDialog` with props `{ title: string; message: string; confirmLabel?: string; busy?: boolean; onCancel: () => void; onConfirm: () => void }` (`confirmLabel` defaults to `'Delete'`, `busy` defaults to `false`)
+  - `interface CallDeletionOptions { onDeleted: (deletedIds: Set<string>) => void; onRefetch: () => Promise<void> }`
+  - `interface CallDeletion { isDeleting: boolean; error: string | null; deleteCalls: (ids: string[]) => Promise<boolean> }`
+  - `useCallDeletion(options: CallDeletionOptions): CallDeletion`
 
-Both are default exports, matching `BottomNav`.
+`SelectionBar` and `ConfirmDialog` are default exports, matching `BottomNav`. `useCallDeletion` is a named export, matching `useMultiSelect`.
+
+**Why the hook exists.** Both the Home page and the Contact Details page need the same delete request, the same count-mismatch check, and the same error-and-refetch recovery. Only the list-update and refetch differ, so those are injected as callbacks and everything else lives here once.
 
 - [ ] **Step 1: Create the SelectionBar styles**
 
@@ -1555,16 +1564,218 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 export default ConfirmDialog;
 ```
 
-- [ ] **Step 5: Verify it compiles**
+- [ ] **Step 5: Write the failing hook test**
+
+Create `frontend/src/hooks/useCallDeletion.test.ts`:
+
+```ts
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+
+vi.mock('@/services/apiClient', () => ({
+    default: { post: vi.fn(), get: vi.fn() },
+}));
+
+import apiClient from '@/services/apiClient';
+import { useCallDeletion } from './useCallDeletion';
+
+const IDS = ['call-a', 'call-b'];
+
+const setup = () => {
+    const onDeleted = vi.fn();
+    const onRefetch = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useCallDeletion({ onDeleted, onRefetch }));
+    return { result, onDeleted, onRefetch };
+};
+
+describe('useCallDeletion', () => {
+    beforeEach(() => {
+        vi.mocked(apiClient.post).mockReset();
+    });
+
+    it('posts the ids to the bulk-delete endpoint', async () => {
+        vi.mocked(apiClient.post).mockResolvedValue({ data: { deletedCount: 2 } } as any);
+        const { result } = setup();
+
+        await act(async () => {
+            await result.current.deleteCalls(IDS);
+        });
+
+        expect(apiClient.post).toHaveBeenCalledWith('/calls/bulk-delete', { ids: IDS });
+    });
+
+    it('reports success and hands back the deleted ids', async () => {
+        vi.mocked(apiClient.post).mockResolvedValue({ data: { deletedCount: 2 } } as any);
+        const { result, onDeleted, onRefetch } = setup();
+
+        let outcome: boolean | undefined;
+        await act(async () => {
+            outcome = await result.current.deleteCalls(IDS);
+        });
+
+        expect(outcome).toBe(true);
+        expect(onDeleted).toHaveBeenCalledWith(new Set(IDS));
+        expect(onRefetch).not.toHaveBeenCalled();
+        expect(result.current.error).toBeNull();
+    });
+
+    it('treats a short deletedCount as a failure and resyncs', async () => {
+        // A short count means some ids were not ours to delete. Reporting
+        // success here would leave the UI claiming rows are gone that aren't.
+        vi.mocked(apiClient.post).mockResolvedValue({ data: { deletedCount: 1 } } as any);
+        const { result, onDeleted, onRefetch } = setup();
+
+        let outcome: boolean | undefined;
+        await act(async () => {
+            outcome = await result.current.deleteCalls(IDS);
+        });
+
+        expect(outcome).toBe(false);
+        expect(onDeleted).not.toHaveBeenCalled();
+        expect(onRefetch).toHaveBeenCalledTimes(1);
+        expect(result.current.error).not.toBeNull();
+    });
+
+    it('reports failure and resyncs when the request throws', async () => {
+        vi.mocked(apiClient.post).mockRejectedValue(new Error('network down'));
+        const { result, onDeleted, onRefetch } = setup();
+
+        let outcome: boolean | undefined;
+        await act(async () => {
+            outcome = await result.current.deleteCalls(IDS);
+        });
+
+        expect(outcome).toBe(false);
+        expect(onDeleted).not.toHaveBeenCalled();
+        expect(onRefetch).toHaveBeenCalledTimes(1);
+        expect(result.current.error).not.toBeNull();
+    });
+
+    it('survives a refetch that also fails', async () => {
+        vi.mocked(apiClient.post).mockRejectedValue(new Error('network down'));
+        const onDeleted = vi.fn();
+        const onRefetch = vi.fn().mockRejectedValue(new Error('still down'));
+        const { result } = renderHook(() => useCallDeletion({ onDeleted, onRefetch }));
+
+        let outcome: boolean | undefined;
+        await act(async () => {
+            outcome = await result.current.deleteCalls(IDS);
+        });
+
+        expect(outcome).toBe(false);
+        expect(result.current.error).not.toBeNull();
+    });
+
+    it('clears a previous error when a later delete succeeds', async () => {
+        const { result } = setup();
+
+        vi.mocked(apiClient.post).mockRejectedValue(new Error('network down'));
+        await act(async () => {
+            await result.current.deleteCalls(IDS);
+        });
+        expect(result.current.error).not.toBeNull();
+
+        vi.mocked(apiClient.post).mockResolvedValue({ data: { deletedCount: 2 } } as any);
+        await act(async () => {
+            await result.current.deleteCalls(IDS);
+        });
+
+        expect(result.current.error).toBeNull();
+    });
+
+    it('is not deleting once the request settles', async () => {
+        vi.mocked(apiClient.post).mockResolvedValue({ data: { deletedCount: 2 } } as any);
+        const { result } = setup();
+
+        await act(async () => {
+            await result.current.deleteCalls(IDS);
+        });
+
+        expect(result.current.isDeleting).toBe(false);
+    });
+});
+```
+
+- [ ] **Step 6: Run the test to verify it fails**
+
+Run: `cd frontend && npx vitest run src/hooks/useCallDeletion.test.ts`
+Expected: FAIL — `Failed to resolve import "./useCallDeletion"`.
+
+- [ ] **Step 7: Write the hook**
+
+Create `frontend/src/hooks/useCallDeletion.ts`:
+
+```ts
+import { useState } from 'react';
+import apiClient from '@/services/apiClient';
+
+export interface CallDeletionOptions {
+    /** Called on success with the ids that were removed, so the page can drop them from its list. */
+    onDeleted: (deletedIds: Set<string>) => void;
+    /** Called on failure to resync the page's list with what the server actually has. */
+    onRefetch: () => Promise<void>;
+}
+
+export interface CallDeletion {
+    isDeleting: boolean;
+    error: string | null;
+    deleteCalls: (ids: string[]) => Promise<boolean>;
+}
+
+export const useCallDeletion = ({ onDeleted, onRefetch }: CallDeletionOptions): CallDeletion => {
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const deleteCalls = async (ids: string[]): Promise<boolean> => {
+        setIsDeleting(true);
+        setError(null);
+
+        try {
+            const response = await apiClient.post('/calls/bulk-delete', { ids });
+
+            if (response.data?.deletedCount !== ids.length) {
+                // A short count means some ids were not ours to delete. Don't
+                // pretend it worked — fall through to the resync below.
+                throw new Error('count mismatch');
+            }
+
+            onDeleted(new Set(ids));
+            return true;
+        } catch (err) {
+            console.error('Error deleting calls:', err);
+            setError('Could not delete those calls. Please try again.');
+
+            try {
+                await onRefetch();
+            } catch (refetchError) {
+                console.error('Error refreshing calls:', refetchError);
+            }
+
+            return false;
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    return { isDeleting, error, deleteCalls };
+};
+```
+
+- [ ] **Step 8: Run the test to verify it passes**
+
+Run: `cd frontend && npm test`
+Expected: PASS — 19 tests (12 from `useMultiSelect`, 7 here).
+
+- [ ] **Step 9: Verify it compiles**
 
 Run: `cd frontend && npm run build`
 Expected: exits 0.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add frontend/src/components/SelectionBar.tsx frontend/src/components/SelectionBar.module.css frontend/src/components/ConfirmDialog.tsx frontend/src/components/ConfirmDialog.module.css
-git commit -m "feat: add SelectionBar and ConfirmDialog components"
+git add frontend/src/components/SelectionBar.tsx frontend/src/components/SelectionBar.module.css frontend/src/components/ConfirmDialog.tsx frontend/src/components/ConfirmDialog.module.css frontend/src/hooks/useCallDeletion.ts frontend/src/hooks/useCallDeletion.test.ts
+git commit -m "feat: add SelectionBar, ConfirmDialog, and useCallDeletion hook"
 ```
 
 ---
@@ -1576,7 +1787,7 @@ git commit -m "feat: add SelectionBar and ConfirmDialog components"
 - Modify: `frontend/src/pages/ContactDetailsPage/ContactDetailsPage.module.css`
 
 **Interfaces:**
-- Consumes: `useMultiSelect` (Task 4), `useSelectionBackButton` (Task 5), `SelectionBar` and `ConfirmDialog` (Task 6), `POST /api/calls/bulk-delete` (Task 2)
+- Consumes: `useMultiSelect` (Task 4), `useSelectionBackButton` (Task 5), `SelectionBar`, `ConfirmDialog`, and `useCallDeletion` (Task 6)
 - Produces: nothing consumed by later tasks
 
 - [ ] **Step 1: Add the card styles**
@@ -1615,6 +1826,7 @@ import SelectionBar from '@/components/SelectionBar';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useMultiSelect } from '@/hooks/useMultiSelect';
 import { useSelectionBackButton } from '@/hooks/useSelectionBackButton';
+import { useCallDeletion } from '@/hooks/useCallDeletion';
 ```
 
 - [ ] **Step 3: Add the selection state**
@@ -1624,50 +1836,29 @@ Inside the `ContactDetailsPage` component, below the existing `useState` declara
 ```tsx
     const callSelection = useMultiSelect();
     const [isDeleteCallsOpen, setIsDeleteCallsOpen] = useState(false);
-    const [isDeletingCalls, setIsDeletingCalls] = useState(false);
-    const [actionError, setActionError] = useState<string | null>(null);
 
     useSelectionBackButton(callSelection.isSelecting, callSelection.clear);
+
+    const callDeletion = useCallDeletion({
+        onDeleted: (deletedIds) => {
+            setCalls(prev => prev.filter(call => !deletedIds.has(call._id)));
+        },
+        onRefetch: async () => {
+            const callsRes = await apiClient.get('/calls');
+            setCalls(callsRes.data.filter((c: any) => c.contactId?._id === id));
+        },
+    });
 ```
 
 - [ ] **Step 4: Add the delete handler**
 
-Add this function inside the component, next to `toggleCallTranscript`:
+Add this function inside the component, next to `toggleCallTranscript`. The request, the count-mismatch check, and the error recovery all live in `useCallDeletion`; this only closes the UI around it, which happens either way.
 
 ```tsx
     const handleDeleteSelectedCalls = async () => {
-        const ids = callSelection.selectedIds;
-        setIsDeletingCalls(true);
-        setActionError(null);
-
-        try {
-            const response = await apiClient.post('/calls/bulk-delete', { ids });
-
-            if (response.data?.deletedCount !== ids.length) {
-                // A short count means some ids were not ours to delete. Don't
-                // pretend it worked — resync with what the server actually has.
-                throw new Error('count mismatch');
-            }
-
-            const deleted = new Set(ids);
-            setCalls(prev => prev.filter(call => !deleted.has(call._id)));
-            callSelection.clear();
-            setIsDeleteCallsOpen(false);
-        } catch (error) {
-            console.error('Error deleting calls:', error);
-            setActionError('Could not delete those calls. Please try again.');
-            setIsDeleteCallsOpen(false);
-            callSelection.clear();
-
-            try {
-                const callsRes = await apiClient.get('/calls');
-                setCalls(callsRes.data.filter((c: any) => c.contactId?._id === id));
-            } catch (refetchError) {
-                console.error('Error refreshing calls:', refetchError);
-            }
-        } finally {
-            setIsDeletingCalls(false);
-        }
+        await callDeletion.deleteCalls(callSelection.selectedIds);
+        callSelection.clear();
+        setIsDeleteCallsOpen(false);
     };
 ```
 
@@ -1687,7 +1878,7 @@ Inside the returned JSX, immediately after the opening `<div className={styles.p
                 </>
             )}
 
-            {actionError && <p className={styles.statusMessage}>{actionError}</p>}
+            {callDeletion.error && <p className={styles.statusMessage}>{callDeletion.error}</p>}
 ```
 
 The spacer keeps the fixed bar from covering the header.
@@ -1741,7 +1932,7 @@ Before the closing `<BottomNav />` in the returned JSX, add:
                 <ConfirmDialog
                     title={`Delete ${callSelection.count} ${callSelection.count === 1 ? 'call' : 'calls'}?`}
                     message="This can't be undone."
-                    busy={isDeletingCalls}
+                    busy={callDeletion.isDeleting}
                     onCancel={() => setIsDeleteCallsOpen(false)}
                     onConfirm={handleDeleteSelectedCalls}
                 />
@@ -1779,7 +1970,7 @@ git commit -m "feat: multi-select call delete on contact details"
 - Modify: `frontend/src/pages/ContactDetailsPage/ContactDetailsPage.module.css`
 
 **Interfaces:**
-- Consumes: `ConfirmDialog` (Task 6), `DELETE /api/contacts/:id` (Task 3), and the `actionError` / `setActionError` state added to this page in Task 7 Step 3 — **Task 7 must be complete before starting this task**
+- Consumes: `ConfirmDialog` (Task 6), `DELETE /api/contacts/:id` (Task 3). **Task 7 must be complete first** — this task edits the same page and assumes its imports and header markup are already in place.
 - Produces: nothing consumed by later tasks
 
 - [ ] **Step 1: Add the styles**
@@ -1836,6 +2027,13 @@ Inside the component, next to the selection state added in Task 7, add:
     const navigate = useNavigate();
     const [isDeleteContactOpen, setIsDeleteContactOpen] = useState(false);
     const [isDeletingContact, setIsDeletingContact] = useState(false);
+    const [contactError, setContactError] = useState<string | null>(null);
+```
+
+Then render the message next to the call-delete error added in Task 7 Step 5:
+
+```tsx
+            {contactError && <p className={styles.statusMessage}>{contactError}</p>}
 ```
 
 - [ ] **Step 4: Add the message builder and handler**
@@ -1858,14 +2056,14 @@ Add these inside the component:
 
     const handleDeleteContact = async () => {
         setIsDeletingContact(true);
-        setActionError(null);
+        setContactError(null);
 
         try {
             await apiClient.delete(`/contacts/${id}`);
             navigate('/contacts');
         } catch (error) {
             console.error('Error deleting contact:', error);
-            setActionError('Could not delete this contact. Please try again.');
+            setContactError('Could not delete this contact. Please try again.');
             setIsDeleteContactOpen(false);
             setIsDeletingContact(false);
         }
@@ -1962,7 +2160,7 @@ git commit -m "feat: delete contact with its calls and tasks"
 - Modify: `frontend/src/pages/HomePage/HomePage.module.css`
 
 **Interfaces:**
-- Consumes: `useMultiSelect` (Task 4), `useSelectionBackButton` (Task 5), `SelectionBar` and `ConfirmDialog` (Task 6), `POST /api/calls/bulk-delete` (Task 2)
+- Consumes: `useMultiSelect` (Task 4), `useSelectionBackButton` (Task 5), `SelectionBar`, `ConfirmDialog`, and `useCallDeletion` (Task 6)
 - Produces: nothing consumed by later tasks
 
 - [ ] **Step 1: Add the card styles**
@@ -1999,19 +2197,28 @@ import SelectionBar from '@/components/SelectionBar';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useMultiSelect } from '@/hooks/useMultiSelect';
 import { useSelectionBackButton } from '@/hooks/useSelectionBackButton';
+import { useCallDeletion } from '@/hooks/useCallDeletion';
 ```
 
 - [ ] **Step 3: Add the selection state**
 
-Inside the `HomePage` component, below the existing `useState` declarations, add:
+Inside the `HomePage` component, below the existing `useState` declarations, add. Note the `onRefetch` differs from the Contact Details page — Home shows every contact's calls, so it does not filter.
 
 ```tsx
     const callSelection = useMultiSelect();
     const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
-    const [actionError, setActionError] = useState<string | null>(null);
 
     useSelectionBackButton(callSelection.isSelecting, callSelection.clear);
+
+    const callDeletion = useCallDeletion({
+        onDeleted: (deletedIds) => {
+            setCalls(prev => prev.filter(call => !deletedIds.has(call._id)));
+        },
+        onRefetch: async () => {
+            const callsRes = await apiClient.get('/calls');
+            setCalls(callsRes.data);
+        },
+    });
 ```
 
 - [ ] **Step 4: Add the delete handler**
@@ -2020,38 +2227,9 @@ Add this function inside the component, below `filteredCalls`:
 
 ```tsx
     const handleDeleteSelectedCalls = async () => {
-        const ids = callSelection.selectedIds;
-        setIsDeleting(true);
-        setActionError(null);
-
-        try {
-            const response = await apiClient.post('/calls/bulk-delete', { ids });
-
-            if (response.data?.deletedCount !== ids.length) {
-                // A short count means some ids were not ours to delete. Don't
-                // pretend it worked — resync with what the server actually has.
-                throw new Error('count mismatch');
-            }
-
-            const deleted = new Set(ids);
-            setCalls(prev => prev.filter(call => !deleted.has(call._id)));
-            callSelection.clear();
-            setIsDeleteOpen(false);
-        } catch (error) {
-            console.error('Error deleting calls:', error);
-            setActionError('Could not delete those calls. Please try again.');
-            setIsDeleteOpen(false);
-            callSelection.clear();
-
-            try {
-                const callsRes = await apiClient.get('/calls');
-                setCalls(callsRes.data);
-            } catch (refetchError) {
-                console.error('Error refreshing calls:', refetchError);
-            }
-        } finally {
-            setIsDeleting(false);
-        }
+        await callDeletion.deleteCalls(callSelection.selectedIds);
+        callSelection.clear();
+        setIsDeleteOpen(false);
     };
 ```
 
@@ -2077,7 +2255,7 @@ Immediately after the opening `<div className={styles.pageWrapper}>` tag, add:
 Directly below the `<h2 className={styles.sectionTitle}>Recent Call Insights</h2>` line, add:
 
 ```tsx
-                        {actionError && <p className={styles.statusMessage}>{actionError}</p>}
+                        {callDeletion.error && <p className={styles.statusMessage}>{callDeletion.error}</p>}
 ```
 
 - [ ] **Step 7: Wire the call cards**
@@ -2107,7 +2285,7 @@ Before the closing `<BottomNav />` in the returned JSX, add:
                 <ConfirmDialog
                     title={`Delete ${callSelection.count} ${callSelection.count === 1 ? 'call' : 'calls'}?`}
                     message="This can't be undone."
-                    busy={isDeleting}
+                    busy={callDeletion.isDeleting}
                     onCancel={() => setIsDeleteOpen(false)}
                     onConfirm={handleDeleteSelectedCalls}
                 />
@@ -2117,7 +2295,7 @@ Before the closing `<BottomNav />` in the returned JSX, add:
 - [ ] **Step 9: Verify the whole suite and build**
 
 Run: `cd frontend && npm test && npm run build`
-Expected: 12 tests pass, build exits 0.
+Expected: 19 tests pass, build exits 0.
 
 - [ ] **Step 10: Verify by hand in the browser**
 
@@ -2207,8 +2385,8 @@ git commit -m "chore: update Android assets with delete feature"
 | Back button exits selection | Task 5, verified in Task 10 |
 | `SelectionBar`, `ConfirmDialog` | Task 6 |
 | Confirm copy and destructive styling | Tasks 6, 7, 9 |
-| Remove rows from local state on success | Tasks 7, 9 |
-| Error + refetch on failure or count mismatch | Tasks 7, 9 |
+| Remove rows from local state on success | Task 6 (`useCallDeletion`), wired in 7 and 9 |
+| Error + refetch on failure or count mismatch | Task 6 (`useCallDeletion`), wired in 7 and 9 |
 | Contact delete button with damage counts | Task 8 |
 | Zero-count clauses omitted | Task 8 |
 | Navigate to `/contacts` after contact delete | Task 8 |
@@ -2216,6 +2394,8 @@ git commit -m "chore: update Android assets with delete feature"
 | Backend test list | Tasks 1, 2, 3 |
 | Frontend `useMultiSelect` test list | Task 4 |
 | Manual device checks | Task 10 |
+
+**Amendment (2026-07-27, pre-flight):** the delete request, count-mismatch check, and error/refetch recovery were originally written out twice — once in Task 7 and once in Task 9. They are now extracted into `useCallDeletion` in Task 6, which both pages consume. This also made that logic directly testable; Task 6 gained 7 tests as a result.
 
 **Deviations from the spec, both deliberate:**
 
