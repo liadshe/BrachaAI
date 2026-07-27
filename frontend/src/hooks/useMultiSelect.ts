@@ -61,6 +61,14 @@ export const useMultiSelect = (): MultiSelect => {
     // toggling them.
     const getItemProps = (id: string, onActivate?: () => void): ItemPointerProps => ({
         onPointerDown: (event: PressLikeEvent) => {
+            // A click always precedes the next pointerdown, never follows it,
+            // so it's safe to clear a stale flag here. This guards against the
+            // case where a long press fires (setting the flag) but the pointer
+            // then drags off the card before release: onPointerMove bails out
+            // early because the timer is already null, nothing cancels, and
+            // the click lands on a common ancestor instead of this card's
+            // onClick — leaving the flag stuck and swallowing the next tap.
+            suppressClickRef.current = false;
             cancelPendingPress();
             startRef.current = { clientX: event.clientX, clientY: event.clientY };
             timerRef.current = setTimeout(() => {

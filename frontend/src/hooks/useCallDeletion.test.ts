@@ -112,6 +112,21 @@ describe('useCallDeletion', () => {
         expect(result.current.error).toBeNull();
     });
 
+    it('does not send a request when called with an empty id list', async () => {
+        const { result, onDeleted, onRefetch } = setup();
+
+        let outcome: boolean | undefined;
+        await act(async () => {
+            outcome = await result.current.deleteCalls([]);
+        });
+
+        expect(apiClient.post).not.toHaveBeenCalled();
+        expect(onDeleted).not.toHaveBeenCalled();
+        expect(onRefetch).not.toHaveBeenCalled();
+        expect(outcome).toBe(false);
+        expect(result.current.error).toBeNull();
+    });
+
     it('is not deleting once the request settles', async () => {
         vi.mocked(apiClient.post).mockResolvedValue({ data: { deletedCount: 2 } } as any);
         const { result } = setup();

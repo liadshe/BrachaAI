@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import apiClient from '../../services/apiClient';
 import BottomNav from '@/components/BottomNav';
@@ -62,7 +62,15 @@ const ContactDetailsPage: React.FC = () => {
     const [isDeletingContact, setIsDeletingContact] = useState(false);
     const [contactError, setContactError] = useState<string | null>(null);
 
-    useSelectionBackButton(callSelection.isSelecting, callSelection.clear);
+    // Back must also close the confirm dialog — otherwise the selection
+    // clears but the dialog stays open, now reading "Delete 0 calls?" with
+    // an enabled Delete button that would POST an empty id list.
+    const exitSelection = useCallback(() => {
+        setIsDeleteCallsOpen(false);
+        callSelection.clear();
+    }, [callSelection.clear]);
+
+    useSelectionBackButton(callSelection.isSelecting, exitSelection);
 
     const callDeletion = useCallDeletion({
         onDeleted: (deletedIds) => {
@@ -124,8 +132,16 @@ const ContactDetailsPage: React.FC = () => {
         try {
             await apiClient.delete(`/contacts/${id}`);
             navigate('/contacts');
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error deleting contact:', error);
+
+            if (error?.response?.status === 404) {
+                // Already gone (e.g. deleted from another device) — the
+                // desired end state is already reached, so just leave.
+                navigate('/contacts');
+                return;
+            }
+
             setContactError('Could not delete this contact. Please try again.');
             setIsDeleteContactOpen(false);
             setIsDeletingContact(false);
@@ -289,9 +305,6 @@ const ContactDetailsPage: React.FC = () => {
                 </>
             )}
 
-            {callDeletion.error && <p className={styles.statusMessage}>{callDeletion.error}</p>}
-            {contactError && <p className={styles.statusMessage}>{contactError}</p>}
-
             {/* Header section matching David Cohen details screen */}
             <div className={styles.header}>
                 <div className={styles.headerTopRow}>
@@ -316,6 +329,8 @@ const ContactDetailsPage: React.FC = () => {
                     </button>
                 </div>
 
+                {contactError && <p className={styles.errorMessage}>{contactError}</p>}
+
                 <h1 className={styles.contactName}>{contact.name}</h1>
                 <div className={styles.phoneRow}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={styles.phoneIcon}>
@@ -327,15 +342,23 @@ const ContactDetailsPage: React.FC = () => {
 
             {/* Tab select bar */}
             <div className={styles.tabBar}>
-                <button 
+                <button
                     className={`${styles.tabBtn} ${activeTab === 'calls' ? styles.activeTab : ''}`}
-                    onClick={() => setActiveTab('calls')}
+                    onClick={() => {
+                        // Also closes the delete-calls dialog if it was open,
+                        // for the same reason Back does (see exitSelection).
+                        exitSelection();
+                        setActiveTab('calls');
+                    }}
                 >
                     Calls
                 </button>
-                <button 
+                <button
                     className={`${styles.tabBtn} ${activeTab === 'tasks' ? styles.activeTab : ''}`}
-                    onClick={() => setActiveTab('tasks')}
+                    onClick={() => {
+                        exitSelection();
+                        setActiveTab('tasks');
+                    }}
                 >
                     Tasks
                 </button>
@@ -344,6 +367,7 @@ const ContactDetailsPage: React.FC = () => {
             <main className={styles.mainContent}>
                 {activeTab === 'calls' ? (
                     <div className={styles.tabContentList}>
+                        {callDeletion.error && <p className={styles.errorMessage}>{callDeletion.error}</p>}
                         {calls.length > 0 ? (
                             calls.map((call) => {
                                 const isExpanded = expandedCallIds.has(call._id);

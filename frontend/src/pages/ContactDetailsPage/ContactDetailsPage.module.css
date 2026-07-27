@@ -425,6 +425,13 @@
     font-size: 16px;
 }
 
+.errorMessage {
+    text-align: center;
+    color: #dc2626;
+    padding: 12px 0;
+    font-size: 16px;
+}
+
 /* Modals */
 .modalOverlay {
     position: fixed;

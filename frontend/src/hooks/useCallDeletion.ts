@@ -19,6 +19,14 @@ export const useCallDeletion = ({ onDeleted, onRefetch }: CallDeletionOptions): 
     const [error, setError] = useState<string | null>(null);
 
     const deleteCalls = async (ids: string[]): Promise<boolean> => {
+        // Belt-and-braces: callers should never reach this with an empty
+        // selection, but if one slips through (e.g. a stale confirm dialog),
+        // don't fire a request the backend would reject anyway — nothing was
+        // attempted, so this isn't an error.
+        if (ids.length === 0) {
+            return false;
+        }
+
         setIsDeleting(true);
         setError(null);
 

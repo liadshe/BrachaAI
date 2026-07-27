@@ -172,6 +172,40 @@ describe('useMultiSelect', () => {
         expect(result.current.selectedIds).toEqual([]);
     });
 
+    it('does not swallow the next tap when a long press click lands on a common ancestor', () => {
+        // Regression: if the pointer drags off the card after the long-press
+        // timer fires (selecting the item) but before release, the browser's
+        // synthesized click lands on an ancestor above the card, not on the
+        // card's own onClick. That leaves suppressClickRef stuck at true,
+        // silently swallowing the very next tap on any card.
+        const onActivateB = vi.fn();
+        const { result } = renderHook(() => useMultiSelect());
+
+        act(() => {
+            result.current.getItemProps('call-a').onPointerDown(press());
+            vi.advanceTimersByTime(LONG_PRESS_MS);
+        });
+        act(() => {
+            // Click never fires on 'call-a' here (it landed on an ancestor
+            // instead) — only the pointerUp reaches this card.
+            result.current.getItemProps('call-a').onPointerUp();
+        });
+
+        expect(result.current.isSelected('call-a')).toBe(true);
+        expect(result.current.count).toBe(1);
+
+        act(() => {
+            result.current.getItemProps('call-b', onActivateB).onPointerDown(press());
+            result.current.getItemProps('call-b', onActivateB).onPointerUp();
+            result.current.getItemProps('call-b', onActivateB).onClick();
+        });
+
+        // We're already in selection mode (call-a selected), so tapping
+        // call-b must toggle it in — not be silently swallowed.
+        expect(result.current.isSelected('call-b')).toBe(true);
+        expect(result.current.count).toBe(2);
+    });
+
     it('exposes the selected ids', () => {
         const { result } = renderHook(() => useMultiSelect());
 

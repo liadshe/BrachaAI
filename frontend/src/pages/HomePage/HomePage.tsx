@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import apiClient from '../../services/apiClient';
 import BottomNav from '@/components/BottomNav';
 import SelectionBar from '@/components/SelectionBar';
@@ -18,7 +18,15 @@ const HomePage: React.FC = () => {
     const callSelection = useMultiSelect();
     const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
-    useSelectionBackButton(callSelection.isSelecting, callSelection.clear);
+    // Back must also close the confirm dialog — otherwise the selection
+    // clears but the dialog stays open, now reading "Delete 0 calls?" with
+    // an enabled Delete button that would POST an empty id list.
+    const exitSelection = useCallback(() => {
+        setIsDeleteOpen(false);
+        callSelection.clear();
+    }, [callSelection.clear]);
+
+    useSelectionBackButton(callSelection.isSelecting, exitSelection);
 
     const callDeletion = useCallDeletion({
         onDeleted: (deletedIds) => {

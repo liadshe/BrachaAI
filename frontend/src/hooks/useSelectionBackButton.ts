@@ -21,7 +21,7 @@ export const useSelectionBackButton = (active: boolean, onExit: () => void) => {
     useEffect(() => {
         if (!active) return;
 
-        window.history.pushState({ brachaSelection: true }, '');
+        window.history.pushState({ ...window.history.state, brachaSelection: true }, '');
 
         const handlePop = () => onExit();
         window.addEventListener('popstate', handlePop);
