@@ -1,11 +1,18 @@
 # Delete Audio After Processing — Manual Verification Checklist
 
-The cases that need a **real phone call** and **real OpenAI spend**. Each run costs one
-Whisper transcription plus one GPT-4o correction.
+The complete on-device verification for this feature. Cases 1, 3, and 5 cost one Whisper
+transcription plus one GPT-4o correction each; cases A, 4, and 6 are free.
 
-The automated checks (transcription failure keeps the recording, no leaked MP3, toggle
-persistence, row hidden in a browser) were run separately on the emulator — see
-`.superpowers/sdd/2026-07-27-delete-audio-after-processing/task-5-report.md`.
+Emulator verification was attempted and abandoned: the AVD's `/data` partition had 466 MB
+free against a 95 MB APK plus Android's low-storage headroom, and the install could not
+proceed. Rather than uninstall unrelated apps to make room, the three checks that were going
+to run there (A, 4, and the browser check) were folded into this list — they take under a
+minute each on a real phone.
+
+Case D from that plan — the toggle row must not render in a plain desktop browser — was
+verified by code inspection instead: `SettingsPage.tsx` gates the row on
+`audioSettingSupported`, which is only set when both bridge methods exist. No runtime check
+was performed.
 
 ## Prerequisites
 
@@ -46,6 +53,28 @@ List recordings before and after each call:
 ```bash
 adb shell ls -la /storage/emulated/0/Recordings/Call
 ```
+
+---
+
+## Case A — The toggle exists and defaults ON (free, do this first)
+
+No call needed. Do this before anything else — it's the cheapest way to catch a broken build.
+
+1. Open the app → Settings → **Call Settings**.
+2. Confirm a row titled **Delete Audio After Processing**, description
+   *"Free up storage by removing recordings once transcribed"*, sitting directly below
+   *Automatic Call Recording*.
+3. Confirm its switch is **ON** without you having touched it.
+4. Flip it OFF, force-stop the app (`adb shell am force-stop com.brachaai.app`), reopen it.
+
+**Pass:** the row is present, starts ON, and still reads OFF after the restart — proving the
+value lives in native storage, not just React state.
+
+**Fail:** row missing entirely → the web bundle in the APK is stale; rebuild the frontend and
+copy `frontend/dist/` into `android/app/src/main/assets/www/` before continuing. Row present
+but reverts to ON after restart → the bridge write isn't landing.
+
+Set it back **ON** before moving on.
 
 ---
 
@@ -111,6 +140,32 @@ prevent. Report it immediately.
 
 ---
 
+## Case 4 — Failed transcription KEEPS the recording (free — no OpenAI spend)
+
+The safety-critical case. Whisper never gets called, so this costs nothing. Run it with the
+toggle **ON** — that's the worst case, where a misplaced deletion would actually fire.
+
+1. Toggle **ON**.
+2. Put the phone in **airplane mode** (or otherwise kill all connectivity) *before* the call
+   finishes, so the Whisper request fails outright.
+3. Make a short call and end it. FFmpeg conversion runs locally and succeeds; the Whisper
+   call then fails with a network error.
+4. Watch for the error notification the app raises on a failed pipeline.
+
+**Pass:** the recording is **still present**, and the app cache holds **no leftover `.mp3`**:
+
+```bash
+adb shell ls -la /storage/emulated/0/Recordings/Call
+adb shell run-as com.brachaai.app ls -la /data/data/com.brachaai.app/cache
+```
+
+**Fail:** recording deleted after a failed transcription. That is the most serious possible
+bug in this feature — the call is unrecoverable. Stop and report it.
+
+Turn airplane mode off afterwards.
+
+---
+
 ## Case 5 — Fresh install: default really is ON
 
 1. `adb uninstall com.brachaai.app`
@@ -139,13 +194,19 @@ failures.
 
 ## Results
 
-| Case | Result | Notes |
-|---|---|---|
-| 1 — ON deletes | | |
-| 2 — OFF keeps | | |
-| 3 — offline queues | | |
-| 5 — fresh-install default | | |
-| 6 — no leaked MP3 | | |
+| Case | Cost | Result | Notes |
+|---|---|---|---|
+| A — toggle present, defaults ON, persists | free | | |
+| 1 — ON deletes | 1 call | | |
+| 2 — OFF keeps | 1 call | | |
+| 3 — offline queues | 1 call | | |
+| 4 — failed transcription keeps | free | | |
+| 5 — fresh-install default | 1 call | | |
+| 6 — no leaked MP3 | free (rides on 1) | | |
+| D — row hidden in browser | — | verified by code inspection only | |
+
+If you only have time for two: **Case 4** (nothing is destroyed when transcription fails) and
+**Case 2** (OFF is honoured). Those are the two where a bug loses a user's recording.
 
 Anything that fails: capture the logcat around it and the folder listing before/after. Those
 two together are enough to diagnose it.
