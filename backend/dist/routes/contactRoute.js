@@ -6,4 +6,5 @@ const authMiddleware_1 = require("../middleware/authMiddleware");
 const router = (0, express_1.Router)();
 router.get('/contacts', authMiddleware_1.protect, contactController_1.getContacts);
 router.get('/contacts/:id', authMiddleware_1.protect, contactController_1.getContactById);
+router.delete('/contacts/:id', authMiddleware_1.protect, contactController_1.deleteContact);
 exports.default = router;
