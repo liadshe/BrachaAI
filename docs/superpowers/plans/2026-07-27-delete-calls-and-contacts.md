@@ -2358,7 +2358,8 @@ Log in and go to the Home page. Confirm each of these:
 5. **Delete works end to end.** Select two calls, tap the trash icon, confirm. Both disappear. Force-stop and reopen the app — they are still gone.
 6. **The same five checks on Contact Details.** Repeat 1, 2, 3, and 5 on a contact's Calls tab.
 7. **View transcript still works.** With nothing selected, tap "View transcript" — it expands. It does not enter selection mode.
-8. **Contact delete works.** Open a contact, tap the red delete button, read the counts in the dialog, confirm. You land on the Contacts list, the contact is gone, and its tasks are gone from the Tasks page.
+8. **Long press on the transcript button.** Press and hold directly on "View transcript" rather than on the card body. It enters selection mode and selects the card, because the whole card is long-press-selectable. Confirm this feels right — WhatsApp behaves the same way on a message bubble. If it feels wrong, the fix is to stop pointer-event propagation on that button, which is a deliberate change, not a bug fix.
+9. **Contact delete works.** Open a contact, tap the red delete button, read the counts in the dialog, confirm. You land on the Contacts list, the contact is gone, and its tasks are gone from the Tasks page.
 
 - [ ] **Step 4: Commit the rebuilt Android assets**
 
