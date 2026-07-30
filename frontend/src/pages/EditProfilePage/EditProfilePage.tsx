@@ -17,6 +17,7 @@ const EditProfilePage: React.FC = () => {
     
     const [name, setName] = useState(user.name || '');
     const [email, setEmail] = useState(user.email || '');
+    const [businessDescription, setBusinessDescription] = useState(user.businessDescription || '');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [selectedAvatar, setSelectedAvatar] = useState(user.profilePicture || PRESET_AVATARS[0].bg);
@@ -41,7 +42,8 @@ const EditProfilePage: React.FC = () => {
                 name,
                 email,
                 password: password || undefined,
-                profilePicture: selectedAvatar
+                profilePicture: selectedAvatar,
+                businessDescription
             });
 
             const updatedUser = response.data.user;
@@ -143,6 +145,17 @@ const EditProfilePage: React.FC = () => {
                                 required
                             />
                         </div>
+                    </div>
+
+                    <div className={styles.inputGroup}>
+                        <label className={styles.inputLabel}>Business Description</label>
+                        <textarea
+                            placeholder="Describe your business"
+                            value={businessDescription}
+                            onChange={(e) => setBusinessDescription(e.target.value)}
+                            className={styles.textareaField}
+                            rows={4}
+                        />
                     </div>
 
                     <div className={styles.divider}>

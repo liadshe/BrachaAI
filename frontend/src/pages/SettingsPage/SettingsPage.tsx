@@ -101,6 +101,9 @@ const SettingsPage: React.FC = () => {
                         <div className={styles.userDetails}>
                             <h2 className={styles.userName}>{user.name || 'David Cohen'}</h2>
                             <p className={styles.userEmail}>{user.phoneNumber ? formatPhoneNumber(user.phoneNumber) : 'No phone number'}</p>
+                            {user.businessDescription ? (
+                                <p className={styles.userBusinessDescription}>{user.businessDescription}</p>
+                            ) : null}
                         </div>
                     </div>
                     <button className={styles.editBtn} onClick={() => navigate('/edit-profile')}>Edit</button>

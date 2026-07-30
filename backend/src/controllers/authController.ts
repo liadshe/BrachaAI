@@ -87,6 +87,7 @@ export const login = async (req: Request, res: Response) => {
                 name: user.name,
                 email: user.email,
                 phoneNumber: user.phoneNumber,
+                businessDescription: user.businessDescription,
                 settings: user.settings,
                 permissions: user.permissions,
                 profilePicture: user.profilePicture
@@ -100,10 +101,37 @@ export const login = async (req: Request, res: Response) => {
 
 import { AuthRequest } from '../middleware/authMiddleware';
 
+export const getProfile = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        res.status(200).json({
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                phoneNumber: user.phoneNumber,
+                businessDescription: user.businessDescription,
+                settings: user.settings,
+                permissions: user.permissions,
+                profilePicture: user.profilePicture
+            }
+        });
+    } catch (error) {
+        console.error('Get profile error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 export const updateProfile = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.id;
-        const { name, phoneNumber, password, profilePicture, businessDescription } = req.body;
+        const { name, phoneNumber, password, profilePicture, businessDescription, settings } = req.body;
 
         const user = await User.findById(userId);
         if (!user) {
@@ -121,6 +149,10 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
         if (name) user.name = name;
         if (profilePicture !== undefined) user.profilePicture = profilePicture;
         if (businessDescription !== undefined) user.businessDescription = businessDescription;
+        if (settings !== undefined) user.settings = {
+            ...user.settings,
+            ...settings
+        };
 
         if (password) {
             user.password = await bcrypt.hash(password, 12);
