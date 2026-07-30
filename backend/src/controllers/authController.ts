@@ -41,7 +41,14 @@ export const signup = async (req: Request, res: Response) => {
         });
 
         // Generate JWT
-        const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({
+            id: newUser._id,
+            name: newUser.name,
+            email: newUser.email,
+            phoneNumber: newUser.phoneNumber,
+            businessDescription: newUser.businessDescription,
+            profilePicture: newUser.profilePicture
+        }, JWT_SECRET, { expiresIn: '7d' });
 
         res.status(201).json({
             token,
@@ -52,7 +59,8 @@ export const signup = async (req: Request, res: Response) => {
                 phoneNumber: newUser.phoneNumber,
                 businessDescription: newUser.businessDescription,
                 settings: newUser.settings,
-                permissions: newUser.permissions
+                permissions: newUser.permissions,
+                profilePicture: newUser.profilePicture
             }
         });
     } catch (error) {
@@ -78,7 +86,14 @@ export const login = async (req: Request, res: Response) => {
         }
 
         // Generate JWT
-        const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            businessDescription: user.businessDescription,
+            profilePicture: user.profilePicture
+        }, JWT_SECRET, { expiresIn: '7d' });
 
         res.status(200).json({
             token,
@@ -160,8 +175,18 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
         await user.save();
 
+        const token = jwt.sign({
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            businessDescription: user.businessDescription,
+            profilePicture: user.profilePicture
+        }, JWT_SECRET, { expiresIn: '7d' });
+
         res.status(200).json({
             message: 'Profile updated successfully',
+            token,
             user: {
                 id: user._id,
                 name: user.name,

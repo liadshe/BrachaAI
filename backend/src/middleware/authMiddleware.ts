@@ -5,6 +5,11 @@ import { JWT_SECRET } from '../config/jwt';
 export interface AuthRequest extends Request {
     user?: {
         id: string;
+        name?: string;
+        email?: string;
+        phoneNumber?: string;
+        profilePicture?: string;
+        businessDescription?: string;
     };
 }
 
@@ -18,8 +23,22 @@ export const protect = (req: AuthRequest, res: Response, next: NextFunction) => 
     const token = authHeader.split(' ')[1];
 
     try {
-        const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
-        req.user = { id: decoded.id };
+        const decoded = jwt.verify(token, JWT_SECRET) as {
+            id: string;
+            name?: string;
+            email?: string;
+            phoneNumber?: string;
+            profilePicture?: string;
+            businessDescription?: string;
+        };
+        req.user = {
+            id: decoded.id,
+            name: decoded.name,
+            email: decoded.email,
+            phoneNumber: decoded.phoneNumber,
+            profilePicture: decoded.profilePicture,
+            businessDescription: decoded.businessDescription,
+        };
         next();
     } catch (error) {
         console.error('Auth middleware verification failed:', error);

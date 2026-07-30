@@ -67,8 +67,7 @@ export const handleIncomingAndroidCall = async (
       actualCallDate
     );
 
-    const user = await userService.getUserById(userId);
-    const businessDescription = user?.businessDescription || '';
+    const businessDescription = req.user?.businessDescription || '';
 
     // Respond as soon as the call is durable. Analysis is slow and may fail;
     // making the client wait on it would turn AI errors into duplicate uploads.
