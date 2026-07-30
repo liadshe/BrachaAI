@@ -6,7 +6,7 @@ import { JWT_SECRET } from '../config/jwt';
 
 export const signup = async (req: Request, res: Response) => {
     try {
-        const { name, email, password, phoneNumber } = req.body;
+        const { name, email, password, phoneNumber, businessDescription } = req.body;
 
         // Check if user already exists
         const existingUser = await User.findOne({ email });
@@ -29,6 +29,7 @@ export const signup = async (req: Request, res: Response) => {
             email,
             phoneNumber,
             password: hashedPassword,
+            businessDescription: businessDescription ?? '',
             settings: {
                 googleCalendarSync: false,
                 autoCallRecording: false
@@ -49,6 +50,7 @@ export const signup = async (req: Request, res: Response) => {
                 name: newUser.name,
                 email: newUser.email,
                 phoneNumber: newUser.phoneNumber,
+                businessDescription: newUser.businessDescription,
                 settings: newUser.settings,
                 permissions: newUser.permissions
             }
@@ -101,7 +103,7 @@ import { AuthRequest } from '../middleware/authMiddleware';
 export const updateProfile = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.id;
-        const { name, phoneNumber, password, profilePicture } = req.body;
+        const { name, phoneNumber, password, profilePicture, businessDescription } = req.body;
 
         const user = await User.findById(userId);
         if (!user) {
@@ -118,6 +120,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
         if (name) user.name = name;
         if (profilePicture !== undefined) user.profilePicture = profilePicture;
+        if (businessDescription !== undefined) user.businessDescription = businessDescription;
 
         if (password) {
             user.password = await bcrypt.hash(password, 12);
@@ -132,6 +135,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
                 name: user.name,
                 email: user.email,
                 phoneNumber: user.phoneNumber,
+                businessDescription: user.businessDescription,
                 settings: user.settings,
                 permissions: user.permissions,
                 profilePicture: user.profilePicture

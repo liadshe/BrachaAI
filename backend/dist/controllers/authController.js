@@ -10,7 +10,7 @@ const User_1 = __importDefault(require("../models/User"));
 const jwt_1 = require("../config/jwt");
 const signup = async (req, res) => {
     try {
-        const { name, email, password, phoneNumber } = req.body;
+        const { name, email, password, phoneNumber, businessDescription } = req.body;
         // Check if user already exists
         const existingUser = await User_1.default.findOne({ email });
         if (existingUser) {
@@ -29,6 +29,7 @@ const signup = async (req, res) => {
             email,
             phoneNumber,
             password: hashedPassword,
+            businessDescription: businessDescription ?? '',
             settings: {
                 googleCalendarSync: false,
                 autoCallRecording: false
@@ -47,6 +48,7 @@ const signup = async (req, res) => {
                 name: newUser.name,
                 email: newUser.email,
                 phoneNumber: newUser.phoneNumber,
+                businessDescription: newUser.businessDescription,
                 settings: newUser.settings,
                 permissions: newUser.permissions
             }
@@ -95,7 +97,7 @@ exports.login = login;
 const updateProfile = async (req, res) => {
     try {
         const userId = req.user?.id;
-        const { name, phoneNumber, password, profilePicture } = req.body;
+        const { name, phoneNumber, password, profilePicture, businessDescription } = req.body;
         const user = await User_1.default.findById(userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
@@ -111,6 +113,8 @@ const updateProfile = async (req, res) => {
             user.name = name;
         if (profilePicture !== undefined)
             user.profilePicture = profilePicture;
+        if (businessDescription !== undefined)
+            user.businessDescription = businessDescription;
         if (password) {
             user.password = await bcryptjs_1.default.hash(password, 12);
         }
@@ -122,6 +126,7 @@ const updateProfile = async (req, res) => {
                 name: user.name,
                 email: user.email,
                 phoneNumber: user.phoneNumber,
+                businessDescription: user.businessDescription,
                 settings: user.settings,
                 permissions: user.permissions,
                 profilePicture: user.profilePicture

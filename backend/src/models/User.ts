@@ -6,6 +6,7 @@ export interface IUser extends Document {
     phoneNumber: string;
     password?: string;
     profilePicture?: string;
+    businessDescription?: string;
     settings: {
         googleCalendarSync: boolean;
         autoCallRecording: boolean;
@@ -22,6 +23,7 @@ const UserSchema = new Schema({
     phoneNumber: { type: String, required: true, unique: true },
     password: { type: String }, // Optional for now if using other auth methods later
     profilePicture: { type: String },
+    businessDescription: { type: String, default: '' },
     settings: {
         googleCalendarSync: { type: Boolean, default: false },
         autoCallRecording: { type: Boolean, default: false },
