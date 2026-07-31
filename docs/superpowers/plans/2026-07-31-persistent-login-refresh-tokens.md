@@ -22,7 +22,32 @@
 | 10-13 (native refresher, uploader, wiring, bundle) | ❌ Not started |
 | 14 (deploy) | ⏸ Backend ready; user runs it |
 
-**Why it stopped:** Gradle cannot run in the execution environment —
+**CORRECTION TO THE ROOT CAUSE — read before trusting the design doc.**
+
+The design doc blames the reported bug ("I have to log in every time I open the app") on the
+root route: `App.tsx` mapped `/` to `LoginPage` without checking the stored token. That was a
+real bug and `AuthLanding` fixes it — but it was **not** what was logging the user out.
+
+The actual cause: the WebView loads from `file:///android_asset/www/index.html`, and
+`localStorage` on that `file://` origin does not survive the app process being killed.
+Confirmed on device — backgrounding the app keeps the session, swiping it away loses it.
+There was never a stored token for the root route to find. Android exposes no API to force a
+localStorage flush, and `file://` has an opaque origin, so this cannot be fixed from the web
+side.
+
+Fixed in commit `57763ac`: the web session is mirrored into `AuthStore`
+(`EncryptedSharedPreferences`) on every `setSession` write and restored in `index.tsx` before
+React renders. The mirror uses keys separate from native's own token pair, which rotates
+independently. Mirroring lives inside `setSession` rather than at its call sites because
+refresh tokens rotate and a mirror that missed a rotation would restore a dead token —
+reproducing the exact bug. **Verified working on device.**
+
+The same commit also fixed a blank-white-screen crash on upgraded installs: `HomePage`,
+`SettingsPage` and `EditProfilePage` called `JSON.parse` on stored state during render, which
+throws on malformed input (including the literal string `"undefined"` an older build could
+write) and unmounts the whole React tree. They now use `getStoredUser()`.
+
+**Why the remaining tasks stopped:** Gradle cannot run in the execution environment —
 `java.io.IOException: Unable to establish loopback connection`, reproduced on
 `./gradlew help` both with and without `--no-daemon` (Gradle forks a single-use daemon
 regardless). Java 21 is present; there is no `kotlinc`. Tasks 10-13 are all Kotlin and
