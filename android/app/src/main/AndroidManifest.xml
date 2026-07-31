@@ -13,6 +13,8 @@
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:allowBackup="true"
@@ -39,6 +41,10 @@
         <service
             android:name=".CallMonitorService"
             android:foregroundServiceType="dataSync"
+            android:exported="false" />
+
+        <service
+            android:name=".CallOverlayService"
             android:exported="false" />
 
         <receiver

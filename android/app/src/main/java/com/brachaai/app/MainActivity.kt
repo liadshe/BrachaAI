@@ -146,4 +146,9 @@ class MainActivity : ComponentActivity() {
             startForegroundService(Intent(this, CallMonitorService::class.java))
         }
     }
+
+    companion object {
+        /** Set by the caller-briefing card; opens the app on that contact. See Task 11. */
+        const val EXTRA_CONTACT_ID = "com.brachaai.app.extra.CONTACT_ID"
+    }
 }
