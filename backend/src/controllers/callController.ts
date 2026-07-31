@@ -68,11 +68,13 @@ export const handleIncomingAndroidCall = async (
       actualCallDate
     );
 
+    const businessDescription = req.user?.businessDescription || '';
+
     // Respond as soon as the call is durable. Analysis is slow and may fail;
     // making the client wait on it would turn AI errors into duplicate uploads.
     res.status(201).json({ success: true, callId: call.id, analysisStatus: 'pending' });
 
-    void runAnalysis(call.id, userId, contact.id, transcript);
+    void runAnalysis(call.id, userId, contact.id, transcript, businessDescription);
   } catch (error) {
     console.error("Controller Error:", error);
     if (!res.headersSent) res.status(500).json({ success: false });
@@ -84,9 +86,10 @@ const runAnalysis = async (
   userId: string,
   contactId: string,
   transcript: string,
+  businessDescription: string,
 ) => {
   try {
-    const analysis = await aiService.analyzeTranscript(transcript);
+    const analysis = await aiService.analyzeTranscript(transcript, businessDescription);
     await callService.updateCallWithAnalysis(callId, analysis.summary);
     console.log(`Processed: ${analysis.summary}`);
 

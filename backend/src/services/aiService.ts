@@ -14,7 +14,7 @@ export interface AiTask {
     priority: 'LOW' | 'MEDIUM' | 'HIGH';
 }
 
-export const analyzeTranscript = async (transcript: string): Promise<AiAnalysis> => {
+export const analyzeTranscript = async (transcript: string, businessDescription: string = ''): Promise<AiAnalysis> => {
     const openai = new OpenAI({ 
     apiKey: process.env.OPENAI_API_KEY 
 });
@@ -25,6 +25,9 @@ export const analyzeTranscript = async (transcript: string): Promise<AiAnalysis>
             { 
                 role: "system", 
                 content: `You process phone call transcripts.
+  Use the provided business description to understand the user's company and call context.
+  If a business description is not provided, proceed based only on the transcript.
+
   Respond ONLY with valid JSON — no markdown, no extra text:
   {
     "summary": "...",
@@ -58,7 +61,7 @@ export const analyzeTranscript = async (transcript: string): Promise<AiAnalysis>
 
   IMPORTANT: Detect the language of the transcript and write the summary and all task text in that same language. Do not translate.`
             },
-            { role: "user", content: transcript }
+            { role: "user", content: `Business description: ${businessDescription || 'None provided'}\n\nTranscript:\n${transcript}` }
         ],
         response_format: { type: "json_object" }
     });

@@ -64,6 +64,14 @@
     margin: 0;
 }
 
+.userBusinessDescription {
+    font-size: 13px;
+    color: #475569;
+    margin: 8px 0 0 0;
+    max-width: 260px;
+    line-height: 1.5;
+}
+
 .editBtn {
     background: none;
     border: none;

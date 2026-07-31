@@ -66,15 +66,15 @@ class ApiService {
 
   // Users
   async login(email: string, password: string): Promise<ApiResponse<any>> {
-    return this.post('/users/login', { email, password });
+    return this.post('/auth/login', { email, password });
   }
 
   async signup(data: any): Promise<ApiResponse<any>> {
-    return this.post('/users/signup', data);
+    return this.post('/auth/signup', data);
   }
 
   async getProfile(): Promise<ApiResponse<any>> {
-    return this.get('/users/profile');
+    return this.get('/auth/profile');
   }
 
   // Generic HTTP methods
@@ -129,7 +129,7 @@ class ApiService {
   }
 
   private getHeaders(): Record<string, string> {
-    const token = localStorage.getItem('authToken');
+    const token = localStorage.getItem('token');
     return {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),

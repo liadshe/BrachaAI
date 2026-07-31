@@ -11,6 +11,7 @@ const SignupPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
+    const [businessDescription, setBusinessDescription] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
     const navigate = useNavigate();
@@ -29,6 +30,7 @@ const SignupPage: React.FC = () => {
                 name: fullName,
                 email,
                 phoneNumber,
+                businessDescription,
                 password
             });
 
@@ -121,6 +123,17 @@ const SignupPage: React.FC = () => {
                                 required
                             />
                         </div>
+                    </div>
+
+                    <div className={styles.inputGroup}>
+                        <label className={styles.inputLabel}>Business Description</label>
+                        <textarea
+                            placeholder="Tell us about your business"
+                            value={businessDescription}
+                            onChange={(e) => setBusinessDescription(e.target.value)}
+                            className={styles.textareaField}
+                            rows={4}
+                        />
                     </div>
 
                     <div className={styles.inputGroup}>

@@ -12,12 +12,13 @@ import {
 
 export const signup = async (req: Request, res: Response) => {
     try {
+        // Validated before any DB work so a bad client costs no round-trips.
         const client = parseClient(req.body.client);
         if (!client) {
             return res.status(400).json({ message: 'Invalid client' });
         }
 
-        const { name, email, password, phoneNumber } = req.body;
+        const { name, email, password, phoneNumber, businessDescription } = req.body;
 
         // Check if user already exists
         const existingUser = await User.findOne({ email });
@@ -40,6 +41,7 @@ export const signup = async (req: Request, res: Response) => {
             email,
             phoneNumber,
             password: hashedPassword,
+            businessDescription: businessDescription ?? '',
             settings: {
                 googleCalendarSync: false,
                 autoCallRecording: false
@@ -51,7 +53,14 @@ export const signup = async (req: Request, res: Response) => {
         });
 
         // Generate JWT
-        const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+        const token = jwt.sign({
+            id: newUser._id,
+            name: newUser.name,
+            email: newUser.email,
+            phoneNumber: newUser.phoneNumber,
+            businessDescription: newUser.businessDescription,
+            profilePicture: newUser.profilePicture
+        }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
         const refreshToken = await tryIssueRefreshToken(String(newUser._id), client);
 
         res.status(201).json({
@@ -62,8 +71,10 @@ export const signup = async (req: Request, res: Response) => {
                 name: newUser.name,
                 email: newUser.email,
                 phoneNumber: newUser.phoneNumber,
+                businessDescription: newUser.businessDescription,
                 settings: newUser.settings,
-                permissions: newUser.permissions
+                permissions: newUser.permissions,
+                profilePicture: newUser.profilePicture
             }
         });
     } catch (error) {
@@ -94,7 +105,14 @@ export const login = async (req: Request, res: Response) => {
         }
 
         // Generate JWT
-        const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+        const token = jwt.sign({
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            businessDescription: user.businessDescription,
+            profilePicture: user.profilePicture
+        }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
         const refreshToken = await tryIssueRefreshToken(String(user._id), client);
 
         res.status(200).json({
@@ -105,6 +123,7 @@ export const login = async (req: Request, res: Response) => {
                 name: user.name,
                 email: user.email,
                 phoneNumber: user.phoneNumber,
+                businessDescription: user.businessDescription,
                 settings: user.settings,
                 permissions: user.permissions,
                 profilePicture: user.profilePicture
@@ -118,10 +137,37 @@ export const login = async (req: Request, res: Response) => {
 
 import { AuthRequest } from '../middleware/authMiddleware';
 
+export const getProfile = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        res.status(200).json({
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                phoneNumber: user.phoneNumber,
+                businessDescription: user.businessDescription,
+                settings: user.settings,
+                permissions: user.permissions,
+                profilePicture: user.profilePicture
+            }
+        });
+    } catch (error) {
+        console.error('Get profile error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 export const updateProfile = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.id;
-        const { name, phoneNumber, password, profilePicture } = req.body;
+        const { name, phoneNumber, password, profilePicture, businessDescription, settings } = req.body;
 
         const user = await User.findById(userId);
         if (!user) {
@@ -138,6 +184,11 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
         if (name) user.name = name;
         if (profilePicture !== undefined) user.profilePicture = profilePicture;
+        if (businessDescription !== undefined) user.businessDescription = businessDescription;
+        if (settings !== undefined) user.settings = {
+            ...user.settings,
+            ...settings
+        };
 
         if (password) {
             user.password = await bcrypt.hash(password, 12);
@@ -145,13 +196,24 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
         await user.save();
 
+        const token = jwt.sign({
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            businessDescription: user.businessDescription,
+            profilePicture: user.profilePicture
+        }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+
         res.status(200).json({
             message: 'Profile updated successfully',
+            token,
             user: {
                 id: user._id,
                 name: user.name,
                 email: user.email,
                 phoneNumber: user.phoneNumber,
+                businessDescription: user.businessDescription,
                 settings: user.settings,
                 permissions: user.permissions,
                 profilePicture: user.profilePicture

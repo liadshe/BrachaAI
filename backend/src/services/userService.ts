@@ -1,4 +1,5 @@
 import Contact from '../models/Contact';
+import User from '../models/User';
 
 export const PLACEHOLDER_PHONE = '000-000-000';
 
