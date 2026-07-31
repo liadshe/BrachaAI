@@ -52,11 +52,11 @@ export const signup = async (req: Request, res: Response) => {
 
         // Generate JWT
         const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
-        const refreshToken = await issueRefreshToken(String(newUser._id), client);
+        const refreshToken = await tryIssueRefreshToken(String(newUser._id), client);
 
         res.status(201).json({
             token,
-            refreshToken,
+            ...(refreshToken !== undefined && { refreshToken }),
             user: {
                 id: newUser._id,
                 name: newUser.name,
@@ -95,11 +95,11 @@ export const login = async (req: Request, res: Response) => {
 
         // Generate JWT
         const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
-        const refreshToken = await issueRefreshToken(String(user._id), client);
+        const refreshToken = await tryIssueRefreshToken(String(user._id), client);
 
         res.status(200).json({
             token,
-            refreshToken,
+            ...(refreshToken !== undefined && { refreshToken }),
             user: {
                 id: user._id,
                 name: user.name,
@@ -163,6 +163,24 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     }
 };
 
+/**
+ * A refresh-token write failure (e.g. a Mongo hiccup on the new collection) must not
+ * turn a working login/signup into a 500 for every user — that would be a brand-new
+ * failure mode on the most critical path. Degrade to the pre-branch response instead:
+ * just the access token, with the failure logged for follow-up.
+ */
+const tryIssueRefreshToken = async (
+    userId: string,
+    client: RefreshClient
+): Promise<string | undefined> => {
+    try {
+        return await issueRefreshToken(userId, client);
+    } catch (error) {
+        console.error('Failed to issue refresh token:', error);
+        return undefined;
+    }
+};
+
 /** Anything other than the two known clients is a bad request, not a silent default. */
 const parseClient = (value: unknown): RefreshClient | null => {
     if (value === undefined || value === null || value === 'web') return 'web';
@@ -207,8 +225,9 @@ export const logout = async (req: Request, res: Response) => {
             await revokeRefreshToken(refreshToken);
         }
 
-        // Always 204: a logout with nothing to revoke has still achieved its goal, and
-        // failing it would strand the UI on a session it has already discarded.
+        // 204 whenever revocation completes or there was nothing to revoke: a logout
+        // with nothing to revoke has still achieved its goal, and failing it would
+        // strand the UI on a session it has already discarded.
         return res.status(204).send();
     } catch (error) {
         console.error('Logout error:', error);
