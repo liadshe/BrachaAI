@@ -1,15 +1,15 @@
 package com.brachaai.app
 
-import android.content.Context
+import android.app.Application
 import android.content.Intent
 import android.telephony.TelephonyManager
-import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
@@ -17,12 +17,12 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class PhoneStateReceiverTest {
 
-    private lateinit var context: Context
+    private lateinit var context: Application
 
     @Before
     fun setUp() {
-        context = ApplicationProvider.getApplicationContext()
-        shadowOf(context as android.app.Application).clearStartedServices()
+        context = RuntimeEnvironment.getApplication()
+        shadowOf(context).clearStartedServices()
         BriefingStore.default(context.filesDir).replaceAll(
             listOf(
                 Briefing(
@@ -46,7 +46,7 @@ class PhoneStateReceiverTest {
     }
 
     private fun nextService(): Intent? =
-        shadowOf(context as android.app.Application).nextStartedService
+        shadowOf(context).nextStartedService
 
     @Test
     fun `a ringing known contact starts the overlay service`() {
@@ -80,7 +80,7 @@ class PhoneStateReceiverTest {
     @Test
     fun `an idle broadcast dismisses the overlay`() {
         broadcast(TelephonyManager.EXTRA_STATE_RINGING, "+972501234567")
-        shadowOf(context as android.app.Application).clearStartedServices()
+        shadowOf(context).clearStartedServices()
 
         broadcast(TelephonyManager.EXTRA_STATE_IDLE)
 
@@ -90,7 +90,7 @@ class PhoneStateReceiverTest {
     @Test
     fun `an offhook broadcast leaves the card alone`() {
         broadcast(TelephonyManager.EXTRA_STATE_RINGING, "+972501234567")
-        shadowOf(context as android.app.Application).clearStartedServices()
+        shadowOf(context).clearStartedServices()
 
         broadcast(TelephonyManager.EXTRA_STATE_OFFHOOK)
 
