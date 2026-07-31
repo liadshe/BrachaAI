@@ -12,3 +12,9 @@ if (!secret) {
 }
 
 export const JWT_SECRET: string = secret;
+
+/**
+ * Short by design: the session is kept alive by refresh tokens, not by a long-lived
+ * access token. Both the WebView and the native uploader refresh on 401.
+ */
+export const ACCESS_TOKEN_TTL = '15m';
