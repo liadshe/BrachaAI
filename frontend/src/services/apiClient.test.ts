@@ -28,9 +28,10 @@ describe('apiClient 401 handling', () => {
         expect(res.data).toEqual({ ok: true });
         expect(getAccessToken()).toBe('fresh');
         expect(getRefreshToken()).toBe('rotated');
+        expect(clientMock.history.get[1].headers?.Authorization).toBe('Bearer fresh');
     });
 
-    it('logs out when the refresh itself fails', async () => {
+    it('logs out when the refresh itself is rejected with 401', async () => {
         setSession('expired', 'dead-refresh');
         mock.onPost(/\/auth\/refresh$/).reply(401);
         clientMock.onGet('/calls').reply(401);
@@ -40,6 +41,45 @@ describe('apiClient 401 handling', () => {
         expect(getAccessToken()).toBeNull();
         expect(getRefreshToken()).toBeNull();
         expect(window.location.hash).toBe('#/login');
+    });
+
+    it('logs out when the refresh itself is rejected with 403', async () => {
+        setSession('expired', 'dead-refresh');
+        mock.onPost(/\/auth\/refresh$/).reply(403);
+        clientMock.onGet('/calls').reply(401);
+
+        await expect(apiClient.get('/calls')).rejects.toBeTruthy();
+
+        expect(getAccessToken()).toBeNull();
+        expect(getRefreshToken()).toBeNull();
+        expect(window.location.hash).toBe('#/login');
+    });
+
+    it('leaves the session intact when the refresh request fails with a network error', async () => {
+        setSession('expired', 'good-refresh');
+        mock.onPost(/\/auth\/refresh$/).networkError();
+        clientMock.onGet('/calls').reply(401);
+
+        await expect(apiClient.get('/calls')).rejects.toBeTruthy();
+
+        // A dropped connection to /auth/refresh is not the server rejecting the
+        // session — losing connectivity for 15 minutes is routine, and logging out
+        // here would reintroduce the spurious-logout bug this feature exists to fix.
+        expect(getAccessToken()).toBe('expired');
+        expect(getRefreshToken()).toBe('good-refresh');
+        expect(window.location.hash).toBe('');
+    });
+
+    it('leaves the session intact when the refresh request fails with a 500', async () => {
+        setSession('expired', 'good-refresh');
+        mock.onPost(/\/auth\/refresh$/).reply(500);
+        clientMock.onGet('/calls').reply(401);
+
+        await expect(apiClient.get('/calls')).rejects.toBeTruthy();
+
+        expect(getAccessToken()).toBe('expired');
+        expect(getRefreshToken()).toBe('good-refresh');
+        expect(window.location.hash).toBe('');
     });
 
     it('logs out when there is no refresh token at all (upgraded install)', async () => {
@@ -79,6 +119,11 @@ describe('apiClient 401 handling', () => {
 
         await expect(apiClient.get('/calls')).rejects.toBeTruthy();
         expect(clientMock.history.get.filter((r) => r.url === '/calls')).toHaveLength(2);
+
+        // A 401 on the retried request despite a fresh, valid token means the endpoint
+        // denied this specific request, not that the session died — must not log out.
+        expect(getAccessToken()).toBe('fresh');
+        expect(window.location.hash).toBe('');
     });
 
     it('passes non-401 errors through untouched', async () => {
