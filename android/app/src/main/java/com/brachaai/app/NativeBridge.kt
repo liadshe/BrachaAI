@@ -38,11 +38,21 @@ class NativeBridge(
         onAuthenticated()
     }
 
+    /**
+     * The sign-out site. Invoked by the web app both on an explicit logout and on the
+     * 401-means-logout path, so it is the one place that sees every session teardown.
+     *
+     * The cached briefings go with the tokens. The design accepts showing a signed-in user
+     * their own summaries on their own ringing screen; showing them to whoever picks the
+     * phone up after a sign-out was never accepted, and nothing downstream would ever
+     * overwrite them — see [BriefingStore.clear].
+     */
     @JavascriptInterface
     fun clearAuth() {
         authStore.clear()
         authStore.clearWebSession()
-        Log.d(TAG, "Auth tokens and web session mirror cleared")
+        BriefingStore.default(appContext.filesDir).clear()
+        Log.d(TAG, "Auth tokens, web session mirror and cached briefings cleared")
     }
 
     /**

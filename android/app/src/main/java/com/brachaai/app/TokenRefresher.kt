@@ -89,6 +89,17 @@ class TokenRefresher(
                     }
                     response.code == 401 || response.code == 403 -> {
                         // The refresh token itself is dead. This is a real logout.
+                        //
+                        // It clears the native token pair and nothing else — deliberately not
+                        // the web-session mirror, and deliberately not the cached briefings.
+                        // The native pair is minted separately via /auth/device-token and can
+                        // die on its own (a rotation race, a backend restart) while the web
+                        // session is perfectly alive, so this is "native credentials expired",
+                        // not "the user signed out". Wiping the overlay's snapshot here would
+                        // silently break briefings for a still-signed-in user. The actual
+                        // sign-out — explicit logout and the 401-means-logout path alike —
+                        // comes back through NativeBridge.clearAuth, which tears down the
+                        // mirror and the snapshot together.
                         Log.w(TAG, "Refresh token rejected (${response.code}); clearing session")
                         tokenStore.clear()
                         null

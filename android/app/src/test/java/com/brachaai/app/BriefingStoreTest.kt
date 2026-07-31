@@ -1,8 +1,10 @@
 package com.brachaai.app
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -32,6 +34,16 @@ class BriefingStoreTest {
         tasks: List<BriefingTask> = listOf(BriefingTask("t1", "Send contract by Tuesday", "HIGH")),
         openTaskCount: Int = 1,
     ) = Briefing(contactId, name, phone, summary, tasks, openTaskCount)
+
+    /**
+     * Skips a test whose premise is a Windows file lock. `RandomAccessFile` on Windows opens
+     * without `FILE_SHARE_DELETE`, so an open handle blocks replacing or deleting the file.
+     * POSIX has no such rule: the move and the delete both succeed with the handle open, and
+     * these tests would *fail* on a Linux CI runner rather than exercising anything. Skipping
+     * says that honestly instead of pretending the platform behaves the same.
+     */
+    private fun assumeWindows() =
+        assumeTrue(System.getProperty("os.name").orEmpty().startsWith("Windows"))
 
     @Test
     fun `round trips a briefing through disk`() {
@@ -128,7 +140,39 @@ class BriefingStoreTest {
     }
 
     @Test
+    fun `clear drops the snapshot and its temp file`() {
+        val (subject, file) = store()
+        subject.replaceAll(listOf(briefing()))
+        val temp = File(file.parentFile, "${file.name}.tmp")
+        temp.writeText("leftover")
+
+        subject.clear()
+
+        assertTrue(subject.readAll().isEmpty())
+        assertFalse(temp.exists())
+    }
+
+    @Test
+    fun `clear leaves nothing readable even when the file cannot be deleted`() {
+        assumeWindows()
+        val (subject, file) = store()
+        subject.replaceAll(listOf(briefing(name = "David Cohen")))
+
+        // An open handle blocks the delete on Windows; clear() must still leave the summaries
+        // unreadable via the in-place truncation fallback rather than giving up.
+        val lock = RandomAccessFile(file, "rw")
+        try {
+            subject.clear()
+        } finally {
+            lock.close()
+        }
+
+        assertTrue(subject.readAll().isEmpty())
+    }
+
+    @Test
     fun `keeps the previous snapshot if the replacement cannot be written`() {
+        assumeWindows()
         val (subject, file) = store()
         subject.replaceAll(listOf(briefing(name = "David Cohen")))
 

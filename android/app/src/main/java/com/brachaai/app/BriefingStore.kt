@@ -40,6 +40,31 @@ class BriefingStore(private val file: File) {
         }
     }
 
+    /**
+     * Drops the snapshot entirely. Called when the session is torn down: these summaries and
+     * open tasks belong to the user who just signed out, and whoever holds the phone next
+     * must not see them painted over a ringing screen.
+     *
+     * Nothing else would ever remove them — [BriefingClient] returns null with no token, and
+     * [BriefingSync.syncNow] deliberately preserves the previous snapshot on a null fetch —
+     * so without this the stale data survives indefinitely.
+     */
+    fun clear() {
+        File(file.parentFile, "${file.name}.tmp").delete()
+        if (!file.exists() || file.delete()) return
+
+        // The delete failed (an open handle, an OEM quirk). Truncate in place instead,
+        // writing straight to the file rather than through the temp-file rename that
+        // replaceAll uses: leaving the old summaries readable is the exact outcome this
+        // method exists to prevent, so a second mechanism with a different failure mode is
+        // worth more here than the atomicity.
+        try {
+            file.writeText(JSONObject().put(KEY_CONTACTS, JSONArray()).toString())
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not clear the briefing snapshot", e)
+        }
+    }
+
     /** The cached briefing for a normalized phone key, or null if this caller is unknown. */
     fun lookup(phoneKey: String): Briefing? =
         readAll().firstOrNull { PhoneNormalizer.key(it.phone) == phoneKey }
