@@ -10,6 +10,51 @@
 
 **Design doc:** `docs/superpowers/specs/2026-07-31-persistent-login-refresh-tokens-design.md`
 
+---
+
+## STATUS as of 2026-07-31 — partially executed, stopped deliberately
+
+| Tasks | State |
+| --- | --- |
+| 1-4 (backend) | ✅ Complete, tested, reviewed |
+| 5-8 (frontend) | ✅ Complete, 41 tests passing, reviewed |
+| 9 (native storage) | ⚠️ Committed (`52a57fd`) but **never compiled** — static review only |
+| 10-13 (native refresher, uploader, wiring, bundle) | ❌ Not started |
+| 14 (deploy) | ⏸ Backend ready; user runs it |
+
+**Why it stopped:** Gradle cannot run in the execution environment —
+`java.io.IOException: Unable to establish loopback connection`, reproduced on
+`./gradlew help` both with and without `--no-daemon` (Gradle forks a single-use daemon
+regardless). Java 21 is present; there is no `kotlinc`. Tasks 10-13 are all Kotlin and
+cannot be compiled or tested, and they change the background-upload auth path where a
+failure is silent. Writing them unverified was judged worse than stopping.
+
+**Two decisions that override the task text below — read these first:**
+
+1. **`ACCESS_TOKEN_TTL` is `'7d'`, not `'15m'`** (`backend/src/config/jwt.ts`, commit
+   `d74aebc`). Task 4 specifies `'15m'`; that was staged back deliberately. The refresh
+   endpoints are inert until a client calls them and deploy safely alone, but the shipped
+   Android uploader holds this token and cannot refresh yet — 15 minutes would 401 every
+   upload happening more than 15 minutes after the app was last opened. **Drop it to
+   `'15m'` in the same commit that completes Task 12**, not before. That is the single
+   change that arms the whole feature.
+
+2. **Task 12's `NativeBridge.setAuth` change was folded into Task 9.** `Task 9` removes
+   `AuthStore.setToken`, which `NativeBridge.kt:31` called, so leaving the bridge for
+   later broke main-source compilation. `NativeBridge.setAuth(token, refreshToken)` is
+   already done. Task 12 is therefore reduced to the `MainActivity` /
+   `CallMonitorService` construction sites only. `NativeBridgeTest` needed no change — it
+   never exercised `setAuth`.
+
+**First step when resuming:** run `./gradlew testDebugUnitTest` and `./gradlew
+assembleDebug` on a machine where Gradle works, to verify the unverified Task 9 commit
+before building anything on top of it. Static review found no compile-blocking issues and
+confirmed all five existing test files stay source-compatible, but that is not a compiler.
+
+**Note on CI:** `.github/workflows/build-and-copy.yml` runs `on: [push]` and rebuilds
+`android/app/src/main/assets/www` from `frontend/`, committing it back to the branch. Task
+13 therefore happens automatically on push and does not need to be run by hand.
+
 ## Global Constraints
 
 - Access token lifetime is exactly `'15m'`. Refresh token lifetime is exactly 90 days.
