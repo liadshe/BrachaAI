@@ -201,8 +201,12 @@ class TokenRefresherTest {
         // lock regresses to per-instance, and it must be left unconsumed.
         assertEquals(1, server.requestCount)
         // Both callers walk away with the rotated token -- the second by blocking and then
-        // taking the short-circuit, not by redeeming its own.
-        assertEquals(listOf("fresh", "fresh"), results.sorted())
+        // taking the short-circuit, not by redeeming its own. The threads finish in
+        // nondeterministic order, so compare as a sorted List<String>; `results` is a
+        // MutableList<String?> and String? is not Comparable, hence the map. A null (a
+        // caller that failed to refresh) is mapped to a sentinel rather than dropped, so a
+        // regression fails the assertion loudly instead of silently shrinking the list.
+        assertEquals(listOf("fresh", "fresh"), results.map { it ?: "<null>" }.sorted())
         // The whole point: no spurious logout from a concurrent, differently-instanced refresh.
         assertEquals(0, store.clearCount)
         assertEquals("fresh", store.getToken())
