@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { establishSession } from '@/services/session';
 import styles from './LoginPage.module.css';
 
 const baseURL = (import.meta.env.VITE_API_URL as string);
@@ -22,10 +23,7 @@ const LoginPage: React.FC = () => {
         password
       });
 
-      const { token, user } = response.data;
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      window.BrachaNative?.setAuth(token);
+      await establishSession(response.data);
 
       navigate('/home');
     } catch (err: any) {

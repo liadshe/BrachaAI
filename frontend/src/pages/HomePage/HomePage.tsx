@@ -6,6 +6,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { useMultiSelect } from '@/hooks/useMultiSelect';
 import { useSelectionBackButton } from '@/hooks/useSelectionBackButton';
 import { useCallDeletion } from '@/hooks/useCallDeletion';
+import { getStoredUser } from '@/services/authTokens';
 import styles from './HomePage.module.css';
 
 const HomePage: React.FC = () => {
@@ -13,7 +14,7 @@ const HomePage: React.FC = () => {
     const [stats, setStats] = useState({ open: 0, overdue: 0, closedToday: 0 });
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const user = getStoredUser();
 
     const callSelection = useMultiSelect();
     const [isDeleteOpen, setIsDeleteOpen] = useState(false);

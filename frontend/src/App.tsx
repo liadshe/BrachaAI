@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { HashRouter , Routes, Route, Navigate } from 'react-router-dom';
 
 import LoginPage from '@pages/LoginPage';
@@ -10,21 +9,19 @@ import ContactsPage from '@pages/ContactsPage';
 import ContactDetailsPage from '@pages/ContactDetailsPage';
 import EditProfilePage from '@pages/EditProfilePage';
 import ProtectedRoute from '@components/ProtectedRoute';
+import AuthLanding from '@components/AuthLanding';
 import '@/styles/global.css';
 
 
 function App() {
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      window.BrachaNative?.setAuth(token);
-    }
-  }, []);
+  // Native holds its own token pair, provisioned at login via /auth/device-token.
+  // Pushing the web token here would overwrite it with credentials that rotate
+  // independently, breaking background uploads.
 
   return (
     <HashRouter>
       <Routes>
-        <Route path="/" element={<LoginPage />} />
+        <Route path="/" element={<AuthLanding />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
