@@ -18,10 +18,12 @@ import org.json.JSONObject
 class AudioProcessor(
     private val openAiApiKey: String,
     private val cacheDir: File,
-    private val authStore: AuthStore,
+    private val authStore: TokenStore,
     private val pendingStore: PendingUploadStore,
     private val callerLookup: CallerLookup,
-    private val settingsStore: SettingsStore
+    private val settingsStore: SettingsStore,
+    private val tokenRefresher: TokenRefresher,
+    private val baseUrl: String = BackendConfig.BASE_URL
 ) {
 
     private val whisperClient = WhisperApiClient(openAiApiKey)
@@ -41,8 +43,14 @@ class AudioProcessor(
     // double-POST every queued entry.
     private val flushMutex = Mutex()
 
-    /** Outcome of an upload attempt, so callers can tell "retry later" from "gone". */
-    private sealed class UploadResult {
+    /**
+     * Outcome of an upload attempt, so callers can tell "retry later" from "gone".
+     *
+     * `internal` rather than `private` so the unit tests can assert on it — the Android
+     * Gradle plugin compiles the test source set as a friend module, so this stays out of
+     * the app's public surface.
+     */
+    internal sealed class UploadResult {
         object Success : UploadResult()
         object Unauthenticated : UploadResult()
         object Transient : UploadResult()
@@ -271,6 +279,9 @@ class AudioProcessor(
         }
     }
 
+    /** Drives one upload attempt without the transcription pipeline. For tests only. */
+    internal fun uploadForTest(payload: PendingUpload): UploadResult = attemptUpload(payload)
+
     private fun attemptUpload(payload: PendingUpload): UploadResult {
         val token = authStore.getToken()
         if (token.isNullOrBlank()) {
@@ -278,6 +289,35 @@ class AudioProcessor(
             return UploadResult.Unauthenticated
         }
 
+        return when (val first = postCall(payload, token)) {
+            is UploadResult.Unauthenticated -> {
+                // This service fires long after the app was last opened, so an expired
+                // access token is the normal case here, not a logout. Refresh once and
+                // retry before giving up on the session.
+                val refreshed = tokenRefresher.refresh(token)
+
+                if (refreshed.isNullOrBlank()) {
+                    // Compare-and-clear: only wipe the token if it's still the one we just
+                    // sent. A login that raced this request may already have stored a fresh
+                    // token — clearing unconditionally would wipe that instead of the
+                    // expired one, right on the post-login flush path. (TokenRefresher has
+                    // already cleared when the refresh token itself was rejected.)
+                    if (authStore.getToken() == token) {
+                        println("Refresh failed; clearing the rejected token")
+                        authStore.clear()
+                    } else {
+                        println("Backend rejected a stale token; a newer token is already stored, leaving it")
+                    }
+                    UploadResult.Unauthenticated
+                } else {
+                    postCall(payload, refreshed)
+                }
+            }
+            else -> first
+        }
+    }
+
+    private fun postCall(payload: PendingUpload, token: String): UploadResult {
         return try {
             val jsonBody = JSONObject().apply {
                 put("contactName", payload.contactName)
@@ -287,7 +327,7 @@ class AudioProcessor(
             }
 
             val request = Request.Builder()
-                .url("http://193.106.55.154:3000/api/calls")
+                .url("$baseUrl/api/calls")
                 .addHeader("Authorization", "Bearer $token")
                 .post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull()))
                 .build()
@@ -295,19 +335,9 @@ class AudioProcessor(
             client.newCall(request).execute().use { response ->
                 when {
                     response.isSuccessful -> UploadResult.Success
-                    response.code == 401 -> {
-                        // Compare-and-clear: only wipe the token if it's still the one we
-                        // just sent. A login that raced this request may already have
-                        // stored a fresh token — clearing unconditionally would wipe that
-                        // instead of the expired one, right on the post-login flush path.
-                        if (authStore.getToken() == token) {
-                            println("Backend rejected the token; clearing it")
-                            authStore.clear()
-                        } else {
-                            println("Backend rejected a stale token; a newer token is already stored, leaving it")
-                        }
-                        UploadResult.Unauthenticated
-                    }
+                    // Deliberately does not clear here: attemptUpload owns that decision,
+                    // because it is the only place that knows whether a refresh was tried.
+                    response.code == 401 -> UploadResult.Unauthenticated
                     response.code in NON_RETRYABLE_CODES -> {
                         Log.e(TAG, "Backend rejected upload with non-retryable HTTP ${response.code}: ${payload.contactName}")
                         UploadResult.Rejected
