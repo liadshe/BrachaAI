@@ -23,8 +23,12 @@ object BriefingNotifier {
 
         val lines = buildList {
             briefing.lastCallSummary?.takeIf { it.isNotBlank() }?.let(::add)
-            briefing.openTasks.take(CallOverlayService.MAX_TASKS_SHOWN).forEach { add("• ${it.title}") }
-            val hidden = briefing.openTaskCount - CallOverlayService.MAX_TASKS_SHOWN
+            val shown = briefing.openTasks.take(MAX_TASKS_SHOWN)
+            shown.forEach { add("• ${it.title}") }
+            // Counted from the untruncated total minus what was actually shown — matches
+            // CallOverlayService.bind() exactly, so the two renderers can't disagree on the
+            // hidden count even if the list ever has fewer than MAX_TASKS_SHOWN items.
+            val hidden = briefing.openTaskCount - shown.size
             if (hidden > 0) add(context.getString(R.string.overlay_more_tasks, hidden))
         }
 

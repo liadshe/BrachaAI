@@ -126,7 +126,12 @@ class CallOverlayService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = 48
+            // WindowManager.LayoutParams.y is in raw pixels, not dp — unlike every other
+            // spacing value in this feature, which lives in XML and gets the dp conversion
+            // for free. Convert explicitly so the offset is ~48dp on every density instead of
+            // 48 raw px (a ~16dp offset on a 3x screen). Do not simplify this back to a bare
+            // integer.
+            y = (OVERLAY_TOP_MARGIN_DP * resources.displayMetrics.density).toInt()
         }
 
         return try {
@@ -206,8 +211,8 @@ class CallOverlayService : Service() {
         private const val ACTION_DISMISS = "com.brachaai.app.action.DISMISS_OVERLAY"
         private const val EXTRA_PHONE_KEY = "com.brachaai.app.extra.PHONE_KEY"
 
-        /** Kept small so the card cannot grow tall enough to cover the answer control. */
-        const val MAX_TASKS_SHOWN = 3
+        /** Target top offset for the card, in dp — converted to px against display density. */
+        private const val OVERLAY_TOP_MARGIN_DP = 48
 
         /**
          * Backstop only — a dropped call-ended broadcast must not strand a card forever.

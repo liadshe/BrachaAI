@@ -11,6 +11,15 @@ data class BriefingTask(
 )
 
 /**
+ * How many open tasks a briefing card shows before truncating to "+N more".
+ *
+ * Shared by [CallOverlayService] and [BriefingNotifier] so the two renderers read the same
+ * value as equals rather than one importing it from the other, and so "+N more" is always
+ * computed as `openTaskCount - (list actually shown).size` in both places.
+ */
+const val MAX_TASKS_SHOWN = 3
+
+/**
  * What the overlay shows for one contact: who they are, what was last discussed, what is
  * still open.
  *
