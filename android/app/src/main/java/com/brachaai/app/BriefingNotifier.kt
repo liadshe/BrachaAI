@@ -40,6 +40,11 @@ object BriefingNotifier {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setAutoCancel(true)
+            // Backstop against a missed IDLE, matching CallOverlayService's delayed teardown
+            // and reading the same constant. Without it a dropped call-ended broadcast left
+            // the caller's summaries sitting in the shade indefinitely — the overlay had a
+            // way out of that state and this renderer did not.
+            .setTimeoutAfter(MAX_BRIEFING_LIFETIME_MS)
             .setContentIntent(contactIntent(context, briefing.contactId))
             .build()
 
@@ -63,15 +68,31 @@ object BriefingNotifier {
         )
     }
 
+    /**
+     * IMPORTANCE_HIGH so the briefing still surfaces over the incoming-call screen — that
+     * visibility is the whole point of the fallback — but with sound and vibration stripped
+     * off the channel. This notification only ever posts while the phone is ringing, so the
+     * default alert fired a second tone and a buzz on top of the ringtone.
+     *
+     * Silenced on the channel rather than with `setSilent(true)` on the builder: on O+ (which
+     * is every supported device, minSdk 26) the channel owns sound and vibration, and
+     * `setSilent` suppresses the heads-up along with the noise, which would bury the card in
+     * the shade exactly when it needs to be seen.
+     */
     private fun createChannel(manager: NotificationManager) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(
+            val channel =
                 NotificationChannel(CHANNEL_ID, "Caller Briefings", NotificationManager.IMPORTANCE_HIGH)
-            )
+            channel.setSound(null, null)
+            channel.enableVibration(false)
+            manager.createNotificationChannel(channel)
         }
     }
 
-    private const val CHANNEL_ID = "caller_briefing"
+    // Versioned id: a channel's sound and vibration are immutable once created, so devices
+    // that already have the original noisy channel would ignore the silencing above. Bumping
+    // the id creates a fresh, silent one instead. Bump again if these settings ever change.
+    private const val CHANNEL_ID = "caller_briefing_v2"
 
     /** Fixed id: a second call replaces the first card rather than stacking beside it. */
     private const val NOTIFICATION_ID = 2

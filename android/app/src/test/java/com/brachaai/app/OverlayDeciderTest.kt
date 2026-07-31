@@ -119,4 +119,23 @@ class OverlayDeciderTest {
 
         assertEquals(OverlayAction.DoNothing, decide("+972529999999", canDrawOverlays = false))
     }
+
+    // The "no empty card" rule now lives on the model, because the decider is not the only
+    // path to a renderer: CallOverlayService re-checks it on its own lookup and again on the
+    // live refresh that repaints a card already on screen. Pinned directly so the invariant
+    // belongs to Briefing rather than to whichever caller happens to remember it.
+    @Test
+    fun `hasContent is false only when there is no summary and no open tasks`() {
+        fun briefing(summary: String?, tasks: List<BriefingTask>) =
+            Briefing("c1", "David Cohen", "+972501234567", summary, tasks, tasks.size)
+
+        val tasks = listOf(BriefingTask("t1", "Send contract", "HIGH"))
+
+        assertFalse(briefing(null, emptyList()).hasContent)
+        assertFalse(briefing("", emptyList()).hasContent)
+        assertFalse(briefing("   ", emptyList()).hasContent)
+        assertTrue(briefing("Promised a quote.", emptyList()).hasContent)
+        assertTrue(briefing(null, tasks).hasContent)
+        assertTrue(briefing("Promised a quote.", tasks).hasContent)
+    }
 }

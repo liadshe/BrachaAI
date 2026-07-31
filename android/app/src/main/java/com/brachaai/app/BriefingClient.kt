@@ -1,5 +1,6 @@
 package com.brachaai.app
 
+import android.net.Uri
 import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -41,9 +42,16 @@ class BriefingClient(
         }
     }
 
-    /** One contact, for the live refresh while a card is on screen. Null on any failure. */
+    /**
+     * One contact, for the live refresh while a card is on screen. Null on any failure.
+     *
+     * The id is percent-encoded before it goes into the path, matching what
+     * `MainActivity.urlFor` already does with the same value on the deep-link side. It was
+     * interpolated raw here, so an id carrying `/`, `?` or `#` addressed a different
+     * resource, or none.
+     */
     fun fetchOne(contactId: String): Briefing? {
-        val body = get("$baseUrl/api/briefings/$contactId") ?: return null
+        val body = get("$baseUrl/api/briefings/${Uri.encode(contactId)}") ?: return null
         return try {
             briefingFromBackendJson(JSONObject(body))
         } catch (e: Exception) {

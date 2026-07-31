@@ -22,7 +22,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeUnit
 
 /**
  * Holds the floating briefing card for the duration of a call.
@@ -30,7 +29,9 @@ import java.util.concurrent.TimeUnit
  * Not a foreground service: a second persistent notification on every call would be worse
  * than the card itself, and the process is already kept alive by [CallMonitorService]. The
  * SYSTEM_ALERT_WINDOW grant is what exempts this from Android 12's background-start rules —
- * which is why the notification fallback never comes through here (see [BriefingNotifier]).
+ * which is why the *routine* notification fallback is posted straight from the receiver
+ * instead of starting this service (see [BriefingNotifier]). The one case that does fall back
+ * from in here is an `addView` that throws despite the permission check having passed.
  */
 class CallOverlayService : Service() {
 
@@ -67,8 +68,12 @@ class CallOverlayService : Service() {
 
     private fun showFor(phoneKey: String) {
         val briefing = store?.lookup(phoneKey)
-        if (briefing == null) {
-            Log.d(TAG, "No cached briefing for the ringing number")
+        // The receiver already made this decision, but it looked the key up in its own
+        // BriefingStore instance and the intent has been round-tripped through the system
+        // since. A sync landing in between can leave a different answer here, so re-apply
+        // the rule rather than trusting that the earlier one still holds.
+        if (briefing == null || !briefing.hasContent) {
+            Log.d(TAG, "No briefing worth showing for the ringing number")
             stopSelf()
             return
         }
@@ -76,14 +81,15 @@ class CallOverlayService : Service() {
         render(briefing)
 
         mainHandler.removeCallbacks(timeout)
-        mainHandler.postDelayed(timeout, MAX_LIFETIME_MS)
+        mainHandler.postDelayed(timeout, MAX_BRIEFING_LIFETIME_MS)
 
         refreshInBackground(briefing.contactId)
     }
 
     /**
-     * Live refresh. The result is discarded unless the card is still on screen — a response
-     * that arrives after the call ended has nowhere to go.
+     * Live refresh. The result is discarded unless the card is still on screen and still
+     * belongs to the contact that was fetched — a response that arrives after the call ended
+     * has nowhere to go, and one that arrives after the card moved on belongs to someone else.
      */
     private fun refreshInBackground(contactId: String) {
         scope.launch {
@@ -92,17 +98,37 @@ class CallOverlayService : Service() {
                 ?: return@launch
 
             withContext(Dispatchers.Main) {
-                if (view != null) render(fresh)
+                val root = view ?: return@withContext
+
+                // Call waiting reuses this service instance: a second RINGING arrives during
+                // OFFHOOK with no intervening IDLE, so the card is rebound to contact B while
+                // contact A's fetch is still in flight. bind() stamps the displayed id onto
+                // the tag; without this check A's response repaints over B's card.
+                if (root.tag != contactId) {
+                    Log.d(TAG, "Discarding a refresh for a contact that is no longer shown")
+                    return@withContext
+                }
+
+                // The card can be emptied out from under us — the user closes the last open
+                // task in the web app mid-ring. Repainting would leave an avatar, a name and
+                // an X, which the design forbids. Keep the stale-but-meaningful card instead
+                // of tearing one down that the user is mid-glance at.
+                if (!fresh.hasContent) {
+                    Log.d(TAG, "Refresh returned an empty briefing; keeping the current card")
+                    return@withContext
+                }
+
+                render(fresh)
             }
         }
     }
 
     private fun render(briefing: Briefing) {
-        val root = view ?: inflate() ?: return
+        val root = view ?: inflate(briefing) ?: return
         bind(root, briefing)
     }
 
-    private fun inflate(): View? {
+    private fun inflate(briefing: Briefing): View? {
         val manager = windowManager ?: return null
         val root = LayoutInflater.from(this).inflate(R.layout.overlay_call_briefing, null)
 
@@ -140,7 +166,12 @@ class CallOverlayService : Service() {
             root
         } catch (e: Exception) {
             // Permission revoked between the check and here, or an OEM refusing the window.
-            Log.e(TAG, "Could not attach the overlay", e)
+            // This is precisely the case the notification fallback exists for, so fall back
+            // instead of showing nothing: we already know the briefing is worth showing and
+            // that the card cannot attach. IDLE dismisses both renderers, so the notification
+            // is torn down by the same broadcast that would have torn down the card.
+            Log.e(TAG, "Could not attach the overlay; falling back to a notification", e)
+            BriefingNotifier.show(this, briefing)
             stopSelf()
             null
         }
@@ -217,12 +248,6 @@ class CallOverlayService : Service() {
 
         /** Target top offset for the card, in dp — converted to px against display density. */
         private const val OVERLAY_TOP_MARGIN_DP = 48
-
-        /**
-         * Backstop only — a dropped call-ended broadcast must not strand a card forever.
-         * Set well past any plausible call length; IDLE is what normally ends the card.
-         */
-        private val MAX_LIFETIME_MS = TimeUnit.MINUTES.toMillis(30)
 
         fun canDrawOverlays(context: Context): Boolean = Settings.canDrawOverlays(context)
 

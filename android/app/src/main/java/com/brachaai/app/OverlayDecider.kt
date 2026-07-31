@@ -24,9 +24,9 @@ class OverlayDecider(private val store: BriefingStore) {
         val briefing = store.lookup(phoneKey) ?: return OverlayAction.DoNothing
 
         // A known contact with no summary and no open tasks would render an empty card.
-        if (briefing.lastCallSummary.isNullOrBlank() && briefing.openTasks.isEmpty()) {
-            return OverlayAction.DoNothing
-        }
+        // The predicate itself lives on Briefing so the service's own lookup and its live
+        // refresh apply the identical rule — see [Briefing.hasContent].
+        if (!briefing.hasContent) return OverlayAction.DoNothing
 
         return OverlayAction.Show(briefing, asNotification = !canDrawOverlays)
     }

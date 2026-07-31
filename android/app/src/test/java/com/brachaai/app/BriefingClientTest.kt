@@ -151,4 +151,16 @@ class BriefingClientTest {
 
         assertNull(client().fetchOne("c1"))
     }
+
+    // The id was interpolated into the path raw while MainActivity.urlFor already ran the
+    // same value through Uri.encode. A separator character in an id therefore addressed a
+    // different resource here than the deep link did -- or no resource at all.
+    @Test
+    fun `fetchOne percent-encodes the contact id into the path`() {
+        server.enqueue(MockResponse().setResponseCode(200).setBody(briefingJson))
+
+        client().fetchOne("a/b c?d#e")
+
+        assertEquals("/api/briefings/a%2Fb%20c%3Fd%23e", server.takeRequest().path)
+    }
 }

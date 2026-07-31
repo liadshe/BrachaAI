@@ -3,6 +3,7 @@ package com.brachaai.app
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 data class BriefingTask(
     val id: String,
@@ -20,6 +21,19 @@ data class BriefingTask(
 const val MAX_TASKS_SHOWN = 3
 
 /**
+ * How long a briefing may stay on screen without a call-ended broadcast.
+ *
+ * Backstop only — `EXTRA_STATE_IDLE` is what normally tears both renderers down. Set well
+ * past any plausible call length.
+ *
+ * Shared by [CallOverlayService] (as a delayed teardown) and [BriefingNotifier] (as
+ * `setTimeoutAfter`) for the same reason as [MAX_TASKS_SHOWN]: read as peers so the two
+ * renderers cannot disagree. The overlay had this backstop and the notification did not, so
+ * a missed IDLE left call summaries sitting in the shade indefinitely.
+ */
+val MAX_BRIEFING_LIFETIME_MS: Long = TimeUnit.MINUTES.toMillis(30)
+
+/**
  * What the overlay shows for one contact: who they are, what was last discussed, what is
  * still open.
  *
@@ -34,6 +48,21 @@ data class Briefing(
     val openTasks: List<BriefingTask>,
     val openTaskCount: Int,
 ) {
+
+    /**
+     * Whether there is anything worth putting on screen — the design's "Both absent → no card
+     * at all". Without a summary and without open tasks the card is an avatar, a name and a
+     * close button.
+     *
+     * Lives on the model rather than inside [OverlayDecider] because three separate paths
+     * reach a renderer: the receiver's decision, [CallOverlayService]'s own lookup when the
+     * intent arrives, and the live refresh that repaints a card already on screen. The
+     * predicate was only enforced on the first, so the other two could each paint an empty
+     * card. Keeping it here means a new render path gets the invariant by construction
+     * instead of having to remember to re-implement it.
+     */
+    val hasContent: Boolean
+        get() = !lastCallSummary.isNullOrBlank() || openTasks.isNotEmpty()
 
     fun toJson(): JSONObject {
         val tasks = JSONArray()

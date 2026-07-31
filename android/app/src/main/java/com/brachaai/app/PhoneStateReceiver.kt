@@ -35,6 +35,20 @@ class PhoneStateReceiver : BroadcastReceiver() {
         @Suppress("DEPRECATION")
         val number = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
 
+        // A null extra and an unrecognised caller both end in DoNothing, but they mean very
+        // different things and only one is a bug. EXTRA_INCOMING_NUMBER is deprecated and is
+        // withheld unless READ_PHONE_STATE *and* READ_CALL_LOG are both granted, so a null
+        // here is the single most likely reason this feature silently does nothing on a real
+        // device. Log it distinctly so that shows up in a bug report instead of hiding behind
+        // "unknown caller".
+        if (number == null) {
+            Log.w(
+                TAG,
+                "Ringing with no EXTRA_INCOMING_NUMBER — READ_PHONE_STATE/READ_CALL_LOG " +
+                    "denied, or this platform no longer populates the extra"
+            )
+        }
+
         val decider = OverlayDecider(BriefingStore.default(context.filesDir))
         when (val action = decider.decide(number, CallOverlayService.canDrawOverlays(context))) {
             is OverlayAction.DoNothing -> Log.d(TAG, "Nothing to show for this caller")

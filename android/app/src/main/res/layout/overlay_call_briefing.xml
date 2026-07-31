@@ -99,13 +99,20 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!--
+      48dp is the minimum accessible touch target. The glyph stays at 16sp and stays put:
+      the box grew by 16dp on each axis and the margins shrank by the matching 8dp, so the
+      ✕ sits exactly where it did before. Worth the care because every other pixel of this
+      card opens the app over a ringing call, so a near miss on the close button is not a
+      no-op — it launches MainActivity mid-ring.
+    -->
     <TextView
         android:id="@+id/overlay_close"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_gravity="top|end"
-        android:layout_marginTop="20dp"
-        android:layout_marginEnd="20dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="12dp"
         android:gravity="center"
         android:text="✕"
         android:textColor="@color/overlay_secondary_text"
