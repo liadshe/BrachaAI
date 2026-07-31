@@ -45,13 +45,26 @@ class MainActivity : ComponentActivity() {
             }
         }.toTypedArray()
 
-    // READ_CALL_LOG is requested opportunistically (so users who grant it still get caller
-    // numbers) but deliberately excluded from requiredPermissions: it's hard-restricted on
-    // API 29+ and can be denied instantly with no dialog, and it must never block the WebView
-    // from rendering — the WebView is the only place the auth token comes from. A denial or
-    // no-op here is fully handled downstream: CallerLookup.findNumberNear catches
-    // SecurityException and returns null, and the backend accepts callerNumber: null.
-    private val optionalPermissions: Array<String> = arrayOf(Manifest.permission.READ_CALL_LOG)
+    /**
+     * Requested opportunistically, never gating. Both are dangerous permissions, so the
+     * manifest declaration alone grants nothing — they have to be asked for at runtime — but
+     * neither may block the WebView from rendering, because the WebView is the only place
+     * the auth token comes from. Gating login on an optional feature is exactly what the
+     * design spec forbids, so a denial degrades that one feature and nothing else.
+     *
+     * - READ_CALL_LOG: caller-number lookup for recordings. Hard-restricted on API 29+ and
+     *   can be denied instantly with no dialog. A denial is fully handled downstream —
+     *   CallerLookup.findNumberNear catches SecurityException and returns null, and the
+     *   backend accepts callerNumber: null.
+     * - READ_PHONE_STATE: the incoming-call briefing overlay. ACTION_PHONE_STATE_CHANGED is
+     *   broadcast with READ_PHONE_STATE as a required receiver permission, so without the
+     *   runtime grant PhoneStateReceiver.onReceive is simply never invoked and the overlay
+     *   never appears. A denial means no briefing card; everything else works unchanged.
+     */
+    private val optionalPermissions: Array<String> = arrayOf(
+        Manifest.permission.READ_CALL_LOG,
+        Manifest.permission.READ_PHONE_STATE,
+    )
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -148,9 +161,13 @@ class MainActivity : ComponentActivity() {
         allFilesGranted = hasAllFilesAccess()
         if (!permissionsGranted && requiredPermissions.isNotEmpty()) {
             permissionLauncher.launch(requiredPermissions + optionalPermissions)
-        } else if (!hasPermission(Manifest.permission.READ_CALL_LOG)) {
+        } else if (optionalPermissions.any { !hasPermission(it) }) {
             // Required permissions are already satisfied (or there are none to ask for on
-            // this SDK level). Ask for READ_CALL_LOG on its own — opportunistic, non-gating.
+            // this SDK level). Ask for the optional ones on their own — opportunistic and
+            // non-gating. Checked as "any still missing" rather than against one named
+            // permission, so an existing install that already granted READ_CALL_LOG is
+            // still prompted for READ_PHONE_STATE, and anything added to the array later is
+            // picked up here without a second edit.
             permissionLauncher.launch(optionalPermissions)
             if (permissionsGranted && allFilesGranted) startMonitorService()
         } else if (permissionsGranted && allFilesGranted) {
