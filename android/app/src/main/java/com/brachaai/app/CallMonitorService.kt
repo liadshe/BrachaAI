@@ -16,14 +16,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 class CallMonitorService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var fileObserver: FileObserver? = null
     private lateinit var audioProcessor: AudioProcessor
+    private lateinit var briefingSync: BriefingSync
     private lateinit var notificationManager: NotificationManager
     private val errorNotificationId = java.util.concurrent.atomic.AtomicInteger(100)
 
@@ -41,6 +45,10 @@ class CallMonitorService : Service() {
             settingsStore = SettingsStore(this),
             tokenRefresher = TokenRefresher(authStore)
         )
+        briefingSync = BriefingSync(
+            client = BriefingClient(authStore, TokenRefresher(authStore)),
+            store = BriefingStore.default(filesDir),
+        )
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannels()
 
@@ -55,10 +63,14 @@ class CallMonitorService : Service() {
         startWatching()
         isRunning = true
         flushPending()
+        startBriefingSyncLoop()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_FLUSH) flushPending()
+        when (intent?.action) {
+            ACTION_FLUSH -> flushPending()
+            ACTION_SYNC_BRIEFINGS -> syncBriefings()
+        }
         return START_STICKY
     }
 
@@ -68,6 +80,34 @@ class CallMonitorService : Service() {
                 audioProcessor.flushPending()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to flush pending uploads", e)
+            }
+        }
+    }
+
+    private fun syncBriefings() {
+        serviceScope.launch {
+            try {
+                briefingSync.syncNow()
+            } catch (e: Exception) {
+                Log.e(TAG, "Briefing sync failed", e)
+            }
+        }
+    }
+
+    /**
+     * Periodic refresh, riding on this already-persistent service rather than adding
+     * WorkManager for one job. If this service is dead the app is not recording calls
+     * either, so there is nothing new to sync.
+     */
+    private fun startBriefingSyncLoop() {
+        serviceScope.launch {
+            while (isActive) {
+                try {
+                    briefingSync.syncNow()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Periodic briefing sync failed", e)
+                }
+                delay(BRIEFING_SYNC_INTERVAL_MS)
             }
         }
     }
@@ -109,6 +149,8 @@ class CallMonitorService : Service() {
         serviceScope.launch {
             try {
                 audioProcessor.processAndSendToBackend(file)
+                // The call that just uploaded produces a new summary and new tasks.
+                briefingSync.syncNow()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to process ${file.name}", e)
                 notifyError(file.name, e.message ?: "Unknown error")
@@ -156,6 +198,8 @@ class CallMonitorService : Service() {
     companion object {
         const val WATCH_PATH = "/storage/emulated/0/Recordings/Call"
         const val ACTION_FLUSH = "com.brachaai.app.action.FLUSH"
+        const val ACTION_SYNC_BRIEFINGS = "com.brachaai.app.action.SYNC_BRIEFINGS"
+        private val BRIEFING_SYNC_INTERVAL_MS = TimeUnit.HOURS.toMillis(6)
         @Volatile var isRunning = false
         private const val NOTIFICATION_ID = 1
         private const val MONITOR_CHANNEL_ID = "call_monitor"
@@ -165,6 +209,14 @@ class CallMonitorService : Service() {
         /** Asks the running service to retry queued uploads — called right after login. */
         fun requestFlush(context: Context) {
             val intent = Intent(context, CallMonitorService::class.java).apply { action = ACTION_FLUSH }
+            context.startForegroundService(intent)
+        }
+
+        /** Asks the running service to refresh the overlay's briefing snapshot. */
+        fun requestBriefingSync(context: Context) {
+            val intent = Intent(context, CallMonitorService::class.java).apply {
+                action = ACTION_SYNC_BRIEFINGS
+            }
             context.startForegroundService(intent)
         }
     }

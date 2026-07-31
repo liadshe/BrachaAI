@@ -105,6 +105,10 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshPermissionState()
+        // The user may have edited tasks in the WebView; keep the overlay's snapshot honest.
+        if (CallMonitorService.isRunning) {
+            CallMonitorService.requestBriefingSync(this)
+        }
     }
 
     private fun refreshPermissionState() {
