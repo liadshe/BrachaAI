@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import apiClient from '../../services/apiClient';
+import { getStoredUser } from '@/services/authTokens';
 import styles from './EditProfilePage.module.css';
 
 const PRESET_AVATARS = [
@@ -13,7 +14,7 @@ const PRESET_AVATARS = [
 
 const EditProfilePage: React.FC = () => {
     const navigate = useNavigate();
-    const [user, setUser] = useState<any>(JSON.parse(localStorage.getItem('user') || '{}'));
+    const [user, setUser] = useState<any>(getStoredUser());
     
     const [name, setName] = useState(user.name || '');
     const [email, setEmail] = useState(user.email || '');

@@ -21,22 +21,57 @@ class NativeBridge(
     private val authStore = AuthStore(appContext)
     private val settingsStore = SettingsStore(appContext)
 
+    /**
+     * Receives the *native* token pair, minted by the web app via /auth/device-token.
+     * Native deliberately holds its own pair rather than the web session's: refresh tokens
+     * rotate per client, so sharing one would have the two clients invalidate each other.
+     */
     @JavascriptInterface
-    fun setAuth(token: String?) {
-        if (token.isNullOrBlank()) {
+    fun setAuth(token: String?, refreshToken: String?) {
+        if (token.isNullOrBlank() || refreshToken.isNullOrBlank()) {
             authStore.clear()
-            Log.d(TAG, "setAuth called with empty token; cleared")
+            Log.d(TAG, "setAuth called with an incomplete pair; cleared")
             return
         }
-        authStore.setToken(token)
-        Log.d(TAG, "Auth token stored from WebView")
+        authStore.setTokens(token, refreshToken)
+        Log.d(TAG, "Auth tokens stored from WebView")
         onAuthenticated()
     }
 
     @JavascriptInterface
     fun clearAuth() {
         authStore.clear()
-        Log.d(TAG, "Auth token cleared")
+        authStore.clearWebSession()
+        Log.d(TAG, "Auth tokens and web session mirror cleared")
+    }
+
+    /**
+     * Durable mirror of the web session.
+     *
+     * The WebView's localStorage lives on a `file://` origin and does not survive the app
+     * process being killed, so the web app mirrors its session here on every write and
+     * restores from it at boot. Without this, logging in and then swiping the app away
+     * logs the user straight back out — the original bug.
+     */
+    @JavascriptInterface
+    fun setWebSession(token: String?, refreshToken: String?, user: String?) {
+        if (token.isNullOrBlank() || refreshToken.isNullOrBlank()) {
+            authStore.clearWebSession()
+            Log.d(TAG, "setWebSession called with an incomplete pair; mirror cleared")
+            return
+        }
+        authStore.setWebSession(token, refreshToken, user ?: "")
+        Log.d(TAG, "Web session mirrored to durable storage")
+    }
+
+    /** Returns the mirrored session as JSON, or an empty string when there is none. */
+    @JavascriptInterface
+    fun getWebSession(): String = authStore.getWebSessionJson() ?: ""
+
+    @JavascriptInterface
+    fun clearWebSession() {
+        authStore.clearWebSession()
+        Log.d(TAG, "Web session mirror cleared")
     }
 
     @JavascriptInterface
