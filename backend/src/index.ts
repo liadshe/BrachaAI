@@ -6,6 +6,7 @@ import callRoutes from './routes/callRoute';
 import authRoutes from './routes/authRoute';
 import taskRoutes from './routes/taskRoute';
 import contactRoutes from './routes/contactRoute';
+import briefingRoutes from './routes/briefingRoute';
 
 
 
@@ -39,6 +40,7 @@ app.use('/api', callRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api', taskRoutes);
 app.use('/api', contactRoutes);
+app.use('/api', briefingRoutes);
 
 
 
