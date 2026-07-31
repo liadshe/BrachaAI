@@ -15,11 +15,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
@@ -27,6 +30,9 @@ class MainActivity : ComponentActivity() {
 
     private var permissionsGranted by mutableStateOf(false)
     private var allFilesGranted by mutableStateOf(false)
+    private var overlayPromptDismissed by mutableStateOf(false)
+    private var canDrawOverlays by mutableStateOf(false)
+    private var startUrl by mutableStateOf(WEB_URL)
     private var webView: AndroidWebView? = null
 
     private val requiredPermissions: Array<String>
@@ -68,6 +74,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        startUrl = urlFor(intent)
         refreshPermissionState()
 
         setContent {
@@ -77,11 +84,19 @@ class MainActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.Center
             ) {
                 if (permissionsGranted && allFilesGranted) {
-                    WebViewScreen(
-                        url = "file:///android_asset/www/index.html",
-                        onAuthenticated = { CallMonitorService.requestFlush(this@MainActivity) }
-                    ) { wv ->
-                        webView = wv
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        WebViewScreen(
+                            url = startUrl,
+                            onAuthenticated = { CallMonitorService.requestFlush(this@MainActivity) }
+                        ) { wv ->
+                            webView = wv
+                        }
+                        if (!canDrawOverlays && !overlayPromptDismissed) {
+                            OverlayPermissionPrompt(
+                                onEnable = { openOverlaySettings() },
+                                onDismiss = { overlayPromptDismissed = true },
+                            )
+                        }
                     }
                 } else if (!allFilesGranted) {
                     Text(
@@ -102,6 +117,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val target = urlFor(intent)
+        startUrl = target
+        webView?.loadUrl(target)
+    }
+
+    /**
+     * The web app uses HashRouter, so a route is a fragment on the bundled index.html.
+     */
+    private fun urlFor(intent: Intent?): String {
+        val contactId = intent?.getStringExtra(EXTRA_CONTACT_ID)
+        return if (contactId.isNullOrBlank()) WEB_URL else "$WEB_URL#/contacts/$contactId"
+    }
+
     override fun onResume() {
         super.onResume()
         refreshPermissionState()
@@ -112,6 +143,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshPermissionState() {
+        canDrawOverlays = CallOverlayService.canDrawOverlays(this)
         permissionsGranted = hasPermissions()
         allFilesGranted = hasAllFilesAccess()
         if (!permissionsGranted && requiredPermissions.isNotEmpty()) {
@@ -147,8 +179,49 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Composable
+    private fun BoxScope.OverlayPermissionPrompt(onEnable: () -> Unit, onDismiss: () -> Unit) {
+        Card(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    stringResource(R.string.overlay_permission_title),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.overlay_permission_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Start,
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.overlay_permission_dismiss))
+                    }
+                    Button(onClick = onEnable) {
+                        Text(stringResource(R.string.overlay_permission_enable))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun openOverlaySettings() {
+        startActivity(
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                data = Uri.parse("package:$packageName")
+            }
+        )
+    }
+
     companion object {
         /** Set by the caller-briefing card; opens the app on that contact. See Task 11. */
         const val EXTRA_CONTACT_ID = "com.brachaai.app.extra.CONTACT_ID"
+        private const val WEB_URL = "file:///android_asset/www/index.html"
     }
 }
