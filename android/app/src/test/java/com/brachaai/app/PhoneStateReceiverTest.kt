@@ -1,10 +1,13 @@
 package com.brachaai.app
 
 import android.app.Application
+import android.app.Notification
+import android.app.NotificationManager
 import android.content.Intent
 import android.telephony.TelephonyManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -12,6 +15,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowSettings
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -23,6 +27,9 @@ class PhoneStateReceiverTest {
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
         shadowOf(context).clearStartedServices()
+        // The overlay path is the primary path this feature exists for, so it is the default
+        // for every test here unless a test explicitly opts out (see the fallback test below).
+        ShadowSettings.setCanDrawOverlays(true)
         BriefingStore.default(context.filesDir).replaceAll(
             listOf(
                 Briefing(
@@ -54,6 +61,23 @@ class PhoneStateReceiverTest {
 
         val started = nextService()
         assertEquals(CallOverlayService::class.java.name, started?.component?.className)
+    }
+
+    @Test
+    fun `a ringing known contact without the overlay permission posts a notification instead`() {
+        ShadowSettings.setCanDrawOverlays(false)
+
+        broadcast(TelephonyManager.EXTRA_STATE_RINGING, "+972501234567")
+
+        assertNull("the overlay service must not start without the permission", nextService())
+
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val notifications = shadowOf(manager).allNotifications
+        assertTrue("expected a fallback notification to be posted", notifications.isNotEmpty())
+        assertEquals(
+            "David Cohen",
+            notifications.first().extras.getString(Notification.EXTRA_TITLE),
+        )
     }
 
     @Test
