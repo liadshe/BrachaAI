@@ -69,6 +69,7 @@ The central API and data processing engine.
 *   **`routes/`**: Defines the API endpoints and maps them to the appropriate controllers.
 *   **`services/`**: Encapsulates business logic.
     *   `aiService.ts`: Interacts with the OpenAI GPT-4o API to analyze transcripts, generate summaries, and create structured task lists.
+    *   `briefingService.ts`: Assembles the per-contact briefing (most recent summarised call, plus a capped, priority-sorted list of open tasks and the untruncated open-task count) that the Android overlay shows when a known contact calls.
     *   `callService.ts`, `taskService.ts`, `userService.ts`: Handle CRUD operations and business logic related to their respective domains.
 *   **`index.ts`**: The server entry point. It initializes the Express app, connects to MongoDB, and starts the server.
 
@@ -110,6 +111,10 @@ The primary data flow is initiated by a phone call on the Android device.
     *   The user opens the BrachaAI application (either via a web browser or the Android app).
     *   The React frontend makes authenticated `GET` requests to the backend API (e.g., `/api/calls`, `/api/tasks`) to fetch and display data.
     *   Users can view call summaries, full transcripts, and manage their tasks and contacts. All user-initiated changes (e.g., updating a task's status) result in API calls to the backend, which updates the state in MongoDB.
+7.  **Incoming-Call Briefing (Android)**:
+    *   Independently of the flow above, the Android app periodically calls `GET /api/briefings` (on a timer, after every upload, and when the app comes to the foreground) to fetch a briefing for every contact and caches it on-device.
+    *   When the phone rings, the app matches the caller against this on-device cache — no network round trip on the ring path — and, for a known contact with a summary or open tasks, shows a floating card (or a notification, if it lacks the overlay permission) with the contact's name, last call summary, and open tasks.
+    *   `GET /api/briefings/:contactId` refreshes a single contact's briefing while its card is on screen.
 
 ```mermaid
 sequenceDiagram
