@@ -14,6 +14,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 // Robolectric: BriefingStore/Briefing use android.util.Log and org.json.
 @RunWith(RobolectricTestRunner::class)
@@ -83,5 +84,42 @@ class BriefingSyncTest {
         assertTrue(sync().syncNow())
 
         assertTrue(store.readAll().isEmpty())
+    }
+
+    @Test
+    fun `concurrent triggers are serialized rather than racing on the snapshot`() {
+        // BriefingClient and BriefingStore are both final production classes, so there is no
+        // seam to fake fetchAll() and observe overlap directly. Instead this drives real
+        // concurrency through MockWebServer: two responses, each with a body delay, requested
+        // from two real threads against one BriefingSync instance. If syncNow() were not
+        // @Synchronized the two HTTP round trips would overlap and the wall-clock time would
+        // be roughly one delay; serialized, it is roughly the sum of both. That is a genuine
+        // timing observation of the lock, not a re-statement of the annotation.
+        val delayMs = 300L
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(payload)
+                .setBodyDelay(delayMs, TimeUnit.MILLISECONDS)
+        )
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(payload)
+                .setBodyDelay(delayMs, TimeUnit.MILLISECONDS)
+        )
+
+        val briefingSync = sync()
+        val results = java.util.Collections.synchronizedList(mutableListOf<Boolean>())
+
+        val start = System.nanoTime()
+        val threads = List(2) { Thread { results.add(briefingSync.syncNow()) } }
+        threads.forEach { it.start() }
+        threads.forEach { it.join(10_000) }
+        val elapsedMs = (System.nanoTime() - start) / 1_000_000
+
+        assertEquals(2, results.size)
+        assertTrue("both concurrent syncs should still succeed", results.all { it })
+        assertTrue(
+            "expected the two calls to be serialized (~${delayMs * 2}ms), took ${elapsedMs}ms; " +
+                "if this is close to ${delayMs}ms, syncNow() is no longer serializing callers",
+            elapsedMs >= delayMs * 2 - 100
+        )
     }
 }

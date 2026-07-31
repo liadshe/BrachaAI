@@ -34,8 +34,15 @@ class CallMonitorService : Service() {
     override fun onCreate() {
         super.onCreate()
         // One AuthStore instance shared with the refresher: a rotated pair written by the
-        // refresher must be visible to the uploader that asked for it.
+        // refresher must be visible to the uploader that asked for it. The TokenRefresher
+        // itself is shared too, and for the same underlying reason: refresh() is
+        // @Synchronized on the instance, not on the store, so two separate TokenRefresher
+        // instances would hold two separate locks and could both race to redeem the same
+        // single-use refresh token in parallel (e.g. an upload retry and a briefing sync
+        // both hitting a 401 around the same time). One instance is what actually makes the
+        // single-flight guarantee hold.
         val authStore = AuthStore(this)
+        val tokenRefresher = TokenRefresher(authStore)
         audioProcessor = AudioProcessor(
             openAiApiKey = BuildConfig.OPENAI_API_KEY,
             cacheDir = cacheDir,
@@ -43,10 +50,10 @@ class CallMonitorService : Service() {
             pendingStore = PendingUploadStore(File(filesDir, "pending")),
             callerLookup = CallerLookup(this),
             settingsStore = SettingsStore(this),
-            tokenRefresher = TokenRefresher(authStore)
+            tokenRefresher = tokenRefresher
         )
         briefingSync = BriefingSync(
-            client = BriefingClient(authStore, TokenRefresher(authStore)),
+            client = BriefingClient(authStore, tokenRefresher),
             store = BriefingStore.default(filesDir),
         )
         notificationManager = getSystemService(NotificationManager::class.java)
