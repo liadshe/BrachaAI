@@ -2,19 +2,20 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../services/apiClient';
 import { endSession } from '@/services/session';
+import { getStoredUser } from '@/services/authTokens';
 import BottomNav from '@/components/BottomNav';
 import styles from './SettingsPage.module.css';
 
 const SettingsPage: React.FC = () => {
     const navigate = useNavigate();
-    const [user, setUser] = useState<any>(JSON.parse(localStorage.getItem('user') || '{}'));
+    const [user, setUser] = useState<any>(getStoredUser());
     const [googleCalendarSync, setGoogleCalendarSync] = useState(user.settings?.googleCalendarSync || false);
     const [autoCallRecording, setAutoCallRecording] = useState(user.settings?.autoCallRecording || false);
     const [deleteAudioAfterProcessing, setDeleteAudioAfterProcessing] = useState(true);
     const [audioSettingSupported, setAudioSettingSupported] = useState(false);
 
     useEffect(() => {
-        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const storedUser = getStoredUser();
         setUser(storedUser);
         setGoogleCalendarSync(storedUser.settings?.googleCalendarSync || false);
         setAutoCallRecording(storedUser.settings?.autoCallRecording || false);

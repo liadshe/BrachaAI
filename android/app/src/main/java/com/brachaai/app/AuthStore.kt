@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import org.json.JSONObject
 
 /**
  * Sole owner of auth token persistence. The token originates in the WebView's
@@ -109,11 +110,76 @@ class AuthStore(context: Context) : TokenStore {
         }
     }
 
+    /**
+     * Durable mirror of the *web* session.
+     *
+     * The WebView runs from a `file://` origin, and its localStorage does not survive the
+     * app process being killed — verified on device: backgrounding keeps the session,
+     * swiping the app away loses it. Android exposes no API to force a localStorage flush,
+     * so the web app mirrors its session here on every write and restores from it at boot.
+     *
+     * Kept in separate keys from [KEY_TOKEN]/[KEY_REFRESH_TOKEN]: those are native's *own*
+     * pair for background uploads, which rotates independently of the web session's. Mixing
+     * them would have the two clients invalidate each other's refresh token.
+     */
+    fun setWebSession(accessToken: String, refreshToken: String, user: String) {
+        try {
+            prefs.edit()
+                .putString(KEY_WEB_TOKEN, accessToken)
+                .putString(KEY_WEB_REFRESH_TOKEN, refreshToken)
+                .putString(KEY_WEB_USER, user)
+                .apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not persist the web session mirror", e)
+        }
+    }
+
+    /**
+     * The mirrored web session as a JSON object, or `null` if there is nothing usable.
+     *
+     * Returns JSON rather than a data class because the sole consumer is JavaScript across
+     * the WebView bridge, which can only receive primitives.
+     */
+    fun getWebSessionJson(): String? = try {
+        val token = prefs.getString(KEY_WEB_TOKEN, null)
+        val refreshToken = prefs.getString(KEY_WEB_REFRESH_TOKEN, null)
+
+        // Both halves or nothing: handing back an access token with no refresh token would
+        // restore a session that cannot renew itself.
+        if (token.isNullOrBlank() || refreshToken.isNullOrBlank()) {
+            null
+        } else {
+            JSONObject()
+                .put("token", token)
+                .put("refreshToken", refreshToken)
+                .put("user", prefs.getString(KEY_WEB_USER, "") ?: "")
+                .toString()
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Could not read the web session mirror", e)
+        null
+    }
+
+    fun clearWebSession() {
+        try {
+            prefs.edit()
+                .remove(KEY_WEB_TOKEN)
+                .remove(KEY_WEB_REFRESH_TOKEN)
+                .remove(KEY_WEB_USER)
+                .apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not clear the web session mirror", e)
+        }
+    }
+
     companion object {
         private const val TAG = "AuthStore"
         private const val PREFS_NAME = "bracha_auth"
         private const val KEY_TOKEN = "jwt"
         private const val KEY_REFRESH_TOKEN = "refresh_jwt"
+        private const val KEY_WEB_TOKEN = "web_jwt"
+        private const val KEY_WEB_REFRESH_TOKEN = "web_refresh_jwt"
+        private const val KEY_WEB_USER = "web_user"
 
         /**
          * `internal` rather than `private` only so unit tests can seed the login history.

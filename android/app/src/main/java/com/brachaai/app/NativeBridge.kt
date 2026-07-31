@@ -41,7 +41,37 @@ class NativeBridge(
     @JavascriptInterface
     fun clearAuth() {
         authStore.clear()
-        Log.d(TAG, "Auth token cleared")
+        authStore.clearWebSession()
+        Log.d(TAG, "Auth tokens and web session mirror cleared")
+    }
+
+    /**
+     * Durable mirror of the web session.
+     *
+     * The WebView's localStorage lives on a `file://` origin and does not survive the app
+     * process being killed, so the web app mirrors its session here on every write and
+     * restores from it at boot. Without this, logging in and then swiping the app away
+     * logs the user straight back out — the original bug.
+     */
+    @JavascriptInterface
+    fun setWebSession(token: String?, refreshToken: String?, user: String?) {
+        if (token.isNullOrBlank() || refreshToken.isNullOrBlank()) {
+            authStore.clearWebSession()
+            Log.d(TAG, "setWebSession called with an incomplete pair; mirror cleared")
+            return
+        }
+        authStore.setWebSession(token, refreshToken, user ?: "")
+        Log.d(TAG, "Web session mirrored to durable storage")
+    }
+
+    /** Returns the mirrored session as JSON, or an empty string when there is none. */
+    @JavascriptInterface
+    fun getWebSession(): String = authStore.getWebSessionJson() ?: ""
+
+    @JavascriptInterface
+    fun clearWebSession() {
+        authStore.clearWebSession()
+        Log.d(TAG, "Web session mirror cleared")
     }
 
     @JavascriptInterface
