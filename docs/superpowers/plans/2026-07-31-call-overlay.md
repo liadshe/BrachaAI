@@ -2503,10 +2503,12 @@ Create `android/app/src/test/java/com/brachaai/app/PhoneStateReceiverTest.kt`. R
 ```kotlin
 package com.brachaai.app
 
-import android.content.Context
+import android.app.Application
 import android.content.Intent
 import android.telephony.TelephonyManager
-import androidx.test.core.app.ApplicationProvider
+// NOT androidx.test.core.app.ApplicationProvider — androidx.test:core is only on the
+// instrumented-test classpath here. Robolectric's RuntimeEnvironment is already available.
+import org.robolectric.RuntimeEnvironment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -2521,13 +2523,13 @@ import java.io.File
 @Config(sdk = [34])
 class PhoneStateReceiverTest {
 
-    private lateinit var context: Context
+    private lateinit var application: Application
 
     @Before
     fun setUp() {
-        context = ApplicationProvider.getApplicationContext()
-        shadowOf(context as android.app.Application).clearStartedServices()
-        BriefingStore.default(context.filesDir).replaceAll(
+        application = RuntimeEnvironment.getApplication()
+        shadowOf(application).clearStartedServices()
+        BriefingStore.default(application.filesDir).replaceAll(
             listOf(
                 Briefing(
                     contactId = "c1",
@@ -2546,11 +2548,11 @@ class PhoneStateReceiverTest {
             putExtra(TelephonyManager.EXTRA_STATE, state)
             number?.let { putExtra(TelephonyManager.EXTRA_INCOMING_NUMBER, it) }
         }
-        PhoneStateReceiver().onReceive(context, intent)
+        PhoneStateReceiver().onReceive(application, intent)
     }
 
     private fun nextService(): Intent? =
-        shadowOf(context as android.app.Application).nextStartedService
+        shadowOf(application).nextStartedService
 
     @Test
     fun `a ringing known contact starts the overlay service`() {
@@ -2576,7 +2578,7 @@ class PhoneStateReceiverTest {
 
     @Test
     fun `an unrelated broadcast is ignored`() {
-        PhoneStateReceiver().onReceive(context, Intent(Intent.ACTION_BOOT_COMPLETED))
+        PhoneStateReceiver().onReceive(application, Intent(Intent.ACTION_BOOT_COMPLETED))
 
         assertNull(nextService())
     }
@@ -2584,7 +2586,7 @@ class PhoneStateReceiverTest {
     @Test
     fun `an idle broadcast dismisses the overlay`() {
         broadcast(TelephonyManager.EXTRA_STATE_RINGING, "+972501234567")
-        shadowOf(context as android.app.Application).clearStartedServices()
+        shadowOf(application).clearStartedServices()
 
         broadcast(TelephonyManager.EXTRA_STATE_IDLE)
 
@@ -2594,7 +2596,7 @@ class PhoneStateReceiverTest {
     @Test
     fun `an offhook broadcast leaves the card alone`() {
         broadcast(TelephonyManager.EXTRA_STATE_RINGING, "+972501234567")
-        shadowOf(context as android.app.Application).clearStartedServices()
+        shadowOf(application).clearStartedServices()
 
         broadcast(TelephonyManager.EXTRA_STATE_OFFHOOK)
 
@@ -2619,7 +2621,7 @@ Create `android/app/src/main/java/com/brachaai/app/PhoneStateReceiver.kt`:
 package com.brachaai.app
 
 import android.content.BroadcastReceiver
-import android.content.Context
+import android.app.Application
 import android.content.Intent
 import android.telephony.TelephonyManager
 import android.util.Log
@@ -2653,7 +2655,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
         @Suppress("DEPRECATION")
         val number = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
 
-        val decider = OverlayDecider(BriefingStore.default(context.filesDir))
+        val decider = OverlayDecider(BriefingStore.default(application.filesDir))
         when (val action = decider.decide(number, CallOverlayService.canDrawOverlays(context))) {
             is OverlayAction.DoNothing -> Log.d(TAG, "Nothing to show for this caller")
 
