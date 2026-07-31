@@ -32,6 +32,18 @@ class MainActivity : ComponentActivity() {
     private var allFilesGranted by mutableStateOf(false)
     private var overlayPromptDismissed by mutableStateOf(false)
     private var canDrawOverlays by mutableStateOf(false)
+
+    /**
+     * Guards the opportunistic optional-permission request so it fires at most once per
+     * process launch. READ_CALL_LOG is hard-restricted and auto-denied on API 29+ (see the
+     * comment on optionalPermissions below), which makes `optionalPermissions.any { !hasPermission(it) } }`
+     * permanently true for most users; without this guard, refreshPermissionState() — called
+     * from both onCreate and onResume, including the onResume triggered by the launcher's own
+     * dialog resolving — would relaunch the request forever. A fresh process launch resets
+     * this to false, so a user who reconsiders still gets asked again next time they open the
+     * app, which is the right cadence for a permission they might change their mind about.
+     */
+    private var optionalPermissionsRequested = false
     private var startUrl by mutableStateOf(WEB_URL)
     private var webView: AndroidWebView? = null
 
@@ -161,13 +173,21 @@ class MainActivity : ComponentActivity() {
         allFilesGranted = hasAllFilesAccess()
         if (!permissionsGranted && requiredPermissions.isNotEmpty()) {
             permissionLauncher.launch(requiredPermissions + optionalPermissions)
-        } else if (optionalPermissions.any { !hasPermission(it) }) {
+        } else if (!optionalPermissionsRequested && optionalPermissions.any { !hasPermission(it) }) {
             // Required permissions are already satisfied (or there are none to ask for on
             // this SDK level). Ask for the optional ones on their own — opportunistic and
             // non-gating. Checked as "any still missing" rather than against one named
             // permission, so an existing install that already granted READ_CALL_LOG is
             // still prompted for READ_PHONE_STATE, and anything added to the array later is
             // picked up here without a second edit.
+            //
+            // Guarded by optionalPermissionsRequested so this fires at most once per process
+            // launch: READ_CALL_LOG is auto-denied on API 29+, which would otherwise make this
+            // branch permanently true and re-launch the request on every resume forever
+            // (including the resume caused by the launcher's own dialog closing). Once this
+            // has run, a still-missing optional permission falls through to the branch below,
+            // which still starts the service if everything else required is in place.
+            optionalPermissionsRequested = true
             permissionLauncher.launch(optionalPermissions)
             if (permissionsGranted && allFilesGranted) startMonitorService()
         } else if (permissionsGranted && allFilesGranted) {
