@@ -2,7 +2,7 @@ export {};
 
 declare global {
   interface BrachaNativeBridge {
-    setAuth(token: string): void;
+    setAuth(token: string, refreshToken: string): void;
     clearAuth(): void;
     /**
      * Device-local storage settings. Optional because the committed web bundle can run
