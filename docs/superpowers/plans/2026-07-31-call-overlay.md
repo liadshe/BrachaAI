@@ -1032,7 +1032,15 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+// Robolectric because Briefing/TokenRefresher log through android.util.Log and parse with
+// Android's org.json — both throw "not mocked" under AGP's stub jar. Same reason as
+// PendingUploadStoreTest.
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class BriefingClientTest {
 
     private lateinit var server: MockWebServer
@@ -1338,8 +1346,14 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.File
 
+// Robolectric: BriefingStore/Briefing use android.util.Log and org.json.
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class BriefingSyncTest {
 
     @get:Rule
@@ -1642,8 +1656,15 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.File
 
+// Robolectric: OverlayDecider reads through BriefingStore, which uses android.util.Log
+// and org.json. The decider itself is pure, but its collaborator is not.
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class OverlayDeciderTest {
 
     @get:Rule
@@ -2469,9 +2490,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class PhoneStateReceiverTest {
 
     private lateinit var context: Context
