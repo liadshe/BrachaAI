@@ -1451,7 +1451,14 @@ class BriefingSync(
     private val store: BriefingStore,
 ) {
 
-    /** @return true if the snapshot was refreshed. */
+    /**
+     * @return true if the snapshot was refreshed.
+     *
+     * Synchronized: the periodic tick, the post-upload trigger and `ACTION_SYNC_BRIEFINGS`
+     * all launch into the same IO-dispatched scope, and [BriefingStore.replaceAll] writes
+     * through one fixed temp path. Concurrent writers would race on that file.
+     */
+    @Synchronized
     fun syncNow(): Boolean {
         // Null means the fetch failed. An empty list is a real answer — the user deleted
         // their last contact — and must clear the snapshot rather than preserve it.
@@ -1499,10 +1506,19 @@ In `onCreate`, after the `audioProcessor` assignment (the block ending at line 4
 
 ```kotlin
         briefingSync = BriefingSync(
-            client = BriefingClient(authStore, TokenRefresher(authStore)),
+            client = BriefingClient(authStore, tokenRefresher),
             store = BriefingStore.default(filesDir),
         )
 ```
+
+**Share the refresher, not just the store.** `TokenRefresher.refresh()` is `@Synchronized` on
+the *instance*, so two instances hold two different locks and do not serialize with each
+other. Refresh tokens are single-use: if an upload retry and a briefing sync both hit 401
+near-simultaneously with separate refreshers, both POST the same refresh token, one rotates
+it, and the other gets a 401 — which `refresh()` treats as a real logout and clears the
+session. So hoist the existing `TokenRefresher(authStore)` out of the `AudioProcessor`
+constructor call into a local `val tokenRefresher` and pass that one instance to both. This
+is the same reasoning that already makes `onCreate` share a single `AuthStore`.
 
 At the end of `onCreate`, after `flushPending()` (line 57), add:
 
