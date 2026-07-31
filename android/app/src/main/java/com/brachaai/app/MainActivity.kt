@@ -130,7 +130,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun urlFor(intent: Intent?): String {
         val contactId = intent?.getStringExtra(EXTRA_CONTACT_ID)
-        return if (contactId.isNullOrBlank()) WEB_URL else "$WEB_URL#/contacts/$contactId"
+        return if (contactId.isNullOrBlank()) WEB_URL else "$WEB_URL#/contacts/${Uri.encode(contactId)}"
     }
 
     override fun onResume() {
@@ -185,7 +185,7 @@ class MainActivity : ComponentActivity() {
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = BOTTOM_NAV_CLEARANCE + 16.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -223,5 +223,16 @@ class MainActivity : ComponentActivity() {
         /** Set by the caller-briefing card; opens the app on that contact. See Task 11. */
         const val EXTRA_CONTACT_ID = "com.brachaai.app.extra.CONTACT_ID"
         private const val WEB_URL = "file:///android_asset/www/index.html"
+
+        /**
+         * Bottom clearance so the overlay-permission prompt doesn't sit on top of the web
+         * frontend's fixed bottom nav bar (frontend/src/components/BottomNav.module.css:
+         * `min-height: 72px` + `padding: 12px ... env(safe-area-inset-bottom, 12px)` = 96px of
+         * CSS reference pixels, which map ~1:1 to dp). The `env(safe-area-inset-bottom, 12px)`
+         * fallback is device-dependent in principle, but this WebView isn't rendered edge-to-
+         * edge, so it resolves to its 12px fallback in practice. Must track BottomNav's height
+         * if the frontend's nav sizing changes.
+         */
+        private val BOTTOM_NAV_CLEARANCE = 96.dp
     }
 }
