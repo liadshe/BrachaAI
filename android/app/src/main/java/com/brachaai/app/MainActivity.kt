@@ -226,12 +226,24 @@ class MainActivity : ComponentActivity() {
 
         /**
          * Bottom clearance so the overlay-permission prompt doesn't sit on top of the web
-         * frontend's fixed bottom nav bar (frontend/src/components/BottomNav.module.css:
-         * `min-height: 72px` + `padding: 12px ... env(safe-area-inset-bottom, 12px)` = 96px of
-         * CSS reference pixels, which map ~1:1 to dp). The `env(safe-area-inset-bottom, 12px)`
-         * fallback is device-dependent in principle, but this WebView isn't rendered edge-to-
-         * edge, so it resolves to its 12px fallback in practice. Must track BottomNav's height
-         * if the frontend's nav sizing changes.
+         * frontend's fixed bottom nav bar (frontend/src/components/BottomNav.module.css).
+         *
+         * Measured fact: the nav's real rendered height is 72dp. `min-height: 72px` is under
+         * `box-sizing: border-box` (global `* { box-sizing: border-box }` reset in
+         * frontend/src/styles/global.css, imported via App.tsx), so the vertical padding is
+         * absorbed into that 72px rather than adding to it. The bottom padding term,
+         * `env(safe-area-inset-bottom, 12px)`, resolves to 0 here — Chromium supports the
+         * `env()` variable, so the `12px` fallback never applies; it only would on an engine
+         * that doesn't recognize `env()` at all. It resolves to 0 specifically because this
+         * WebView is not rendered edge-to-edge (no `WindowCompat`/`setDecorFitsSystemWindows`
+         * anywhere in android/, theme is `Theme.Material.Light.NoActionBar`), so there's no
+         * system-bar cutout for the safe-area inset to account for. That also means 72dp is a
+         * stable figure, not a lower bound that could grow with a gesture nav bar.
+         *
+         * Chosen margin: 96dp = 72dp (measured) + 24dp deliberate safety margin.
+         *
+         * Must be updated by hand if BottomNav's height, or the app's edge-to-edge status,
+         * changes.
          */
         private val BOTTOM_NAV_CLEARANCE = 96.dp
     }
