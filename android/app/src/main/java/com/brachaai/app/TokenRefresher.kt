@@ -32,25 +32,33 @@ class TokenRefresher(
      * @param staleToken the access token the caller just had rejected.
      * @return a usable access token, or null if the session is over or the attempt failed.
      *
-     * Synchronized, and short-circuits when the store already holds a token newer than
-     * [staleToken]. Refresh tokens are single-use: parallel uploads flushing the pending
-     * queue would otherwise rotate each other out and log the device out spuriously.
+     * Short-circuits when the store already holds a token newer than [staleToken]. Refresh
+     * tokens are single-use: parallel callers flushing the pending queue would otherwise
+     * rotate each other out and log the device out spuriously.
+     *
+     * Synchronized on [refreshLock] — a lock shared by every [TokenRefresher] instance in
+     * the process, not just this one. Every instance ultimately wraps the same underlying
+     * [tokenStore] and redeems tokens against the same backend, so the single-flight
+     * guarantee has to be process-wide: two different `TokenRefresher` objects (e.g. one
+     * built fresh by [CallOverlayService] each time a briefing card shows, another shared by
+     * [CallMonitorService]) can race to redeem the same refresh token just as easily as two
+     * callers sharing one instance can. Locking on `this` would let those two objects hold
+     * two different monitors and both proceed at once.
      */
-    @Synchronized
-    fun refresh(staleToken: String?): String? {
+    fun refresh(staleToken: String?): String? = synchronized(refreshLock) {
         val current = tokenStore.getToken()
         if (!current.isNullOrBlank() && current != staleToken) {
             Log.d(TAG, "Another caller already refreshed; reusing the stored token")
-            return current
+            return@synchronized current
         }
 
         val refreshToken = tokenStore.getRefreshToken()
         if (refreshToken.isNullOrBlank()) {
             Log.w(TAG, "No refresh token stored; cannot refresh")
-            return null
+            return@synchronized null
         }
 
-        return try {
+        try {
             val body = JSONObject()
                 .put("refreshToken", refreshToken)
                 .put("client", CLIENT)
@@ -104,5 +112,12 @@ class TokenRefresher(
     companion object {
         private const val TAG = "TokenRefresher"
         private const val CLIENT = "native"
+
+        // Shared across every instance in the process — see the kdoc on refresh(). A plain
+        // Any() rather than the TokenStore itself: TokenStore is an interface implemented by
+        // whatever the caller passes in, and locking on an object we don't own/control would
+        // be fragile (e.g. if some future TokenStore implementation happened to synchronize
+        // on itself elsewhere).
+        private val refreshLock = Any()
     }
 }

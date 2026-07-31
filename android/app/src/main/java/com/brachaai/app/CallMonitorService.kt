@@ -35,12 +35,11 @@ class CallMonitorService : Service() {
         super.onCreate()
         // One AuthStore instance shared with the refresher: a rotated pair written by the
         // refresher must be visible to the uploader that asked for it. The TokenRefresher
-        // itself is shared too, and for the same underlying reason: refresh() is
-        // @Synchronized on the instance, not on the store, so two separate TokenRefresher
-        // instances would hold two separate locks and could both race to redeem the same
-        // single-use refresh token in parallel (e.g. an upload retry and a briefing sync
-        // both hitting a 401 around the same time). One instance is what actually makes the
-        // single-flight guarantee hold.
+        // itself is shared here too, though it no longer strictly has to be for correctness:
+        // refresh()'s single-flight lock is process-wide (see TokenRefresher.refreshLock), so
+        // even a separate TokenRefresher instance for AudioProcessor and one for
+        // BriefingClient would still serialize correctly against each other. Sharing one
+        // instance is kept anyway — one fewer OkHttpClient/object to construct per service.
         val authStore = AuthStore(this)
         val tokenRefresher = TokenRefresher(authStore)
         audioProcessor = AudioProcessor(
