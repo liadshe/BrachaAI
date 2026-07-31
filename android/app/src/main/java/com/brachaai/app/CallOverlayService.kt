@@ -207,8 +207,12 @@ class CallOverlayService : Service() {
 
     companion object {
         private const val TAG = "CallOverlayService"
-        private const val ACTION_SHOW = "com.brachaai.app.action.SHOW_OVERLAY"
-        private const val ACTION_DISMISS = "com.brachaai.app.action.DISMISS_OVERLAY"
+
+        // Test-visible (not private) so PhoneStateReceiverTest can assert on the action of a
+        // started intent instead of only its component — show() and dismiss() both target this
+        // same service class, so the component alone can't tell the two apart.
+        internal const val ACTION_SHOW = "com.brachaai.app.action.SHOW_OVERLAY"
+        internal const val ACTION_DISMISS = "com.brachaai.app.action.DISMISS_OVERLAY"
         private const val EXTRA_PHONE_KEY = "com.brachaai.app.extra.PHONE_KEY"
 
         /** Target top offset for the card, in dp — converted to px against display density. */

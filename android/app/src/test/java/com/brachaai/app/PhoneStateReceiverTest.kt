@@ -61,6 +61,7 @@ class PhoneStateReceiverTest {
 
         val started = nextService()
         assertEquals(CallOverlayService::class.java.name, started?.component?.className)
+        assertEquals(CallOverlayService.ACTION_SHOW, started?.action)
     }
 
     @Test
@@ -96,9 +97,20 @@ class PhoneStateReceiverTest {
 
     @Test
     fun `an unrelated broadcast is ignored`() {
-        PhoneStateReceiver().onReceive(context, Intent(Intent.ACTION_BOOT_COMPLETED))
+        // A wrong action alone (e.g. Intent.ACTION_BOOT_COMPLETED with no EXTRA_STATE at all)
+        // would pass this test even with the action guard deleted, since getStringExtra(EXTRA_STATE)
+        // would just return null and match neither `when` branch. So this intent carries a
+        // RINGING state and the known contact's number on a non-PHONE_STATE action — the action
+        // guard is the *only* thing standing between this and a shown card.
+        val intent = Intent(Intent.ACTION_BOOT_COMPLETED).apply {
+            putExtra(TelephonyManager.EXTRA_STATE, TelephonyManager.EXTRA_STATE_RINGING)
+            putExtra(TelephonyManager.EXTRA_INCOMING_NUMBER, "+972501234567")
+        }
+        PhoneStateReceiver().onReceive(context, intent)
 
         assertNull(nextService())
+        val manager = context.getSystemService(NotificationManager::class.java)
+        assertTrue(shadowOf(manager).allNotifications.isEmpty())
     }
 
     @Test
@@ -108,7 +120,9 @@ class PhoneStateReceiverTest {
 
         broadcast(TelephonyManager.EXTRA_STATE_IDLE)
 
-        assertEquals(CallOverlayService::class.java.name, nextService()?.component?.className)
+        val dismissed = nextService()
+        assertEquals(CallOverlayService::class.java.name, dismissed?.component?.className)
+        assertEquals(CallOverlayService.ACTION_DISMISS, dismissed?.action)
     }
 
     @Test
