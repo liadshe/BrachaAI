@@ -75,11 +75,13 @@ const startRefresh = (): Promise<string> => {
                     console.warn('Refresh token rejected. Logging out user.', refreshError);
                     failSession();
                 } else {
-                    // Network drop, timeout, or a 5xx from /auth/refresh. The access
-                    // token is now short-lived (15 min), so this is routine — e.g.
-                    // losing connectivity mid-refresh. Logging out here would
-                    // reintroduce the spurious-logout bug this feature exists to fix.
-                    // Leave the session intact; the next request will retry the refresh.
+                    // Network drop, timeout, or a 5xx from /auth/refresh. Access tokens
+                    // are staged at 7d for this release (see ACCESS_TOKEN_TTL in
+                    // backend/src/config/jwt.ts for why), so a 401 here is rarer than the
+                    // 15-minute design calls for, but still routine — e.g. losing
+                    // connectivity mid-refresh. Logging out here would reintroduce the
+                    // spurious-logout bug this feature exists to fix. Leave the session
+                    // intact; the next request will retry the refresh.
                     console.warn('Refresh request failed transiently. Leaving session intact.', refreshError);
                 }
 
