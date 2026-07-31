@@ -6,8 +6,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.File
+import java.io.RandomAccessFile
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class BriefingStoreTest {
 
     @get:Rule
@@ -119,5 +125,23 @@ class BriefingStoreTest {
         )
 
         assertEquals(listOf("Ruth Levi"), subject.readAll().map { it.name })
+    }
+
+    @Test
+    fun `keeps the previous snapshot if the replacement cannot be written`() {
+        val (subject, file) = store()
+        subject.replaceAll(listOf(briefing(name = "David Cohen")))
+
+        // Holding the destination open without FILE_SHARE_DELETE reproduces the Windows
+        // file-lock contention that made the old delete-then-retry rename destroy both the
+        // old and new snapshot: Files.move onto a locked destination now throws instead.
+        val lock = RandomAccessFile(file, "rw")
+        try {
+            subject.replaceAll(listOf(briefing(name = "Ruth Levi")))
+        } finally {
+            lock.close()
+        }
+
+        assertEquals("David Cohen", subject.readAll().single().name)
     }
 }

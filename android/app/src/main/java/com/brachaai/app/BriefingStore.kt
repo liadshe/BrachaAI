@@ -4,6 +4,8 @@ import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
  * The local snapshot the overlay reads when the phone rings.
@@ -27,16 +29,13 @@ class BriefingStore(private val file: File) {
         try {
             file.parentFile?.mkdirs()
             temp.writeText(payload)
-            if (!temp.renameTo(file)) {
-                // Some filesystems refuse a rename onto an existing path.
-                file.delete()
-                if (!temp.renameTo(file)) {
-                    Log.e(TAG, "Could not replace the briefing snapshot")
-                    temp.delete()
-                }
-            }
+            // Files.move with REPLACE_EXISTING swaps the old snapshot for the new one without
+            // ever deleting the destination first. If the replace can't complete — e.g. the
+            // destination is locked by another handle — this throws and the previous snapshot
+            // is left exactly as it was, which is strictly better than losing it.
+            Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
         } catch (e: Exception) {
-            Log.e(TAG, "Could not write the briefing snapshot", e)
+            Log.e(TAG, "Could not replace the briefing snapshot; keeping the previous one", e)
             temp.delete()
         }
     }
