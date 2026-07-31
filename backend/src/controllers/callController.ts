@@ -5,6 +5,7 @@ import * as callService from "../services/callService";
 import * as aiService from "../services/aiService";
 import { createTasksFromAi } from "../services/taskService";
 import { AuthRequest } from "../middleware/authMiddleware";
+import { validateObjectIdList } from "../utils/objectId";
 
 const parseFilenameDate = (dateString: string): Date => {
   if (!dateString) return new Date(); // Fallback to now if no date is provided
@@ -107,5 +108,25 @@ const runAnalysis = async (
     } catch (markFailedError) {
       console.error(`Failed to mark analysis as failed for call ${callId}:`, markFailedError);
     }
+  }
+};
+
+export const bulkDeleteCalls = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthenticated' });
+    }
+
+    const validation = validateObjectIdList(req.body?.ids);
+    if (!validation.ok) {
+      return res.status(400).json({ message: validation.message });
+    }
+
+    const deletedCount = await callService.deleteCallsByIds(userId, validation.ids);
+    res.status(200).json({ deletedCount });
+  } catch (error) {
+    console.error('Bulk delete calls error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 };

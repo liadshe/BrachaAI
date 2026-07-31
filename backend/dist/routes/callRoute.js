@@ -5,8 +5,9 @@ const callController_1 = require("../controllers/callController");
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const router = (0, express_1.Router)();
 // This defines the /api/calls endpoint
-// Since index.ts uses app.use('/api', callRoutes), 
+// Since index.ts uses app.use('/api', callRoutes),
 // this becomes http://localhost:3000/api/calls
 router.post('/calls', authMiddleware_1.protect, callController_1.handleIncomingAndroidCall);
 router.get('/calls', authMiddleware_1.protect, callController_1.getCalls);
+router.post('/calls/bulk-delete', authMiddleware_1.protect, callController_1.bulkDeleteCalls);
 exports.default = router;

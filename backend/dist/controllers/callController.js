@@ -36,12 +36,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handleIncomingAndroidCall = exports.getCalls = void 0;
+exports.bulkDeleteCalls = exports.handleIncomingAndroidCall = exports.getCalls = void 0;
 const Call_1 = __importDefault(require("../models/Call"));
 const userService = __importStar(require("../services/userService"));
 const callService = __importStar(require("../services/callService"));
 const aiService = __importStar(require("../services/aiService"));
 const taskService_1 = require("../services/taskService");
+const objectId_1 = require("../utils/objectId");
 const parseFilenameDate = (dateString) => {
     if (!dateString)
         return new Date(); // Fallback to now if no date is provided
@@ -123,3 +124,22 @@ const runAnalysis = async (callId, userId, contactId, transcript) => {
         }
     }
 };
+const bulkDeleteCalls = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ message: 'Unauthenticated' });
+        }
+        const validation = (0, objectId_1.validateObjectIdList)(req.body?.ids);
+        if (!validation.ok) {
+            return res.status(400).json({ message: validation.message });
+        }
+        const deletedCount = await callService.deleteCallsByIds(userId, validation.ids);
+        res.status(200).json({ deletedCount });
+    }
+    catch (error) {
+        console.error('Bulk delete calls error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+exports.bulkDeleteCalls = bulkDeleteCalls;

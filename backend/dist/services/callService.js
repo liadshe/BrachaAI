@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.markAnalysisFailed = exports.updateCallWithAnalysis = exports.saveRawCall = void 0;
+exports.deleteCallsByIds = exports.markAnalysisFailed = exports.updateCallWithAnalysis = exports.saveRawCall = void 0;
 const Call_1 = __importDefault(require("../models/Call"));
 const saveRawCall = async (userId, contactId, transcript, callDate) => {
     return await Call_1.default.create({
@@ -22,3 +22,8 @@ const markAnalysisFailed = async (callId) => {
     return await Call_1.default.findByIdAndUpdate(callId, { analysisStatus: 'failed' }, { returnDocument: 'after' });
 };
 exports.markAnalysisFailed = markAnalysisFailed;
+const deleteCallsByIds = async (userId, ids) => {
+    const result = await Call_1.default.deleteMany({ _id: { $in: ids }, userId });
+    return result.deletedCount ?? 0;
+};
+exports.deleteCallsByIds = deleteCallsByIds;
