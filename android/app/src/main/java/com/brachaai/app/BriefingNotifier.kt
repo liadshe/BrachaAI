@@ -81,6 +81,13 @@ object BriefingNotifier {
      */
     private fun createChannel(manager: NotificationManager) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Drop the pre-v2 channel on devices that created it. It's never recreated (there
+            // is no code path left that names it), so this only ever removes the orphan; it's
+            // a no-op on installs that never had it. Without this, those devices keep a second,
+            // identically-named "Caller Briefings" entry in App Info -> Notifications forever
+            // — inert, since nothing posts to it, but confusing since toggling it does nothing.
+            manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
+
             val channel =
                 NotificationChannel(CHANNEL_ID, "Caller Briefings", NotificationManager.IMPORTANCE_HIGH)
             channel.setSound(null, null)
@@ -93,6 +100,11 @@ object BriefingNotifier {
     // that already have the original noisy channel would ignore the silencing above. Bumping
     // the id creates a fresh, silent one instead. Bump again if these settings ever change.
     private const val CHANNEL_ID = "caller_briefing_v2"
+
+    // The pre-v2 channel id. Kept only so createChannel() can delete it on devices that
+    // created it before the bump; safe to drop this constant (and the delete call) once
+    // enough time has passed that no installs still carry the old channel.
+    private const val LEGACY_CHANNEL_ID = "caller_briefing"
 
     /** Fixed id: a second call replaces the first card rather than stacking beside it. */
     private const val NOTIFICATION_ID = 2
