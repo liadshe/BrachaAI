@@ -12,6 +12,12 @@ import {
 
 export const signup = async (req: Request, res: Response) => {
     try {
+        // Validated before any DB work so a bad client costs no round-trips.
+        const client = parseClient(req.body.client);
+        if (!client) {
+            return res.status(400).json({ message: 'Invalid client' });
+        }
+
         const { name, email, password, phoneNumber, businessDescription } = req.body;
 
         // Check if user already exists
@@ -54,7 +60,8 @@ export const signup = async (req: Request, res: Response) => {
             phoneNumber: newUser.phoneNumber,
             businessDescription: newUser.businessDescription,
             profilePicture: newUser.profilePicture
-        }, JWT_SECRET, { expiresIn: '7d' });
+        }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+        const refreshToken = await tryIssueRefreshToken(String(newUser._id), client);
 
         res.status(201).json({
             token,
@@ -105,7 +112,8 @@ export const login = async (req: Request, res: Response) => {
             phoneNumber: user.phoneNumber,
             businessDescription: user.businessDescription,
             profilePicture: user.profilePicture
-        }, JWT_SECRET, { expiresIn: '7d' });
+        }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+        const refreshToken = await tryIssueRefreshToken(String(user._id), client);
 
         res.status(200).json({
             token,
@@ -195,7 +203,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
             phoneNumber: user.phoneNumber,
             businessDescription: user.businessDescription,
             profilePicture: user.profilePicture
-        }, JWT_SECRET, { expiresIn: '7d' });
+        }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
 
         res.status(200).json({
             message: 'Profile updated successfully',
