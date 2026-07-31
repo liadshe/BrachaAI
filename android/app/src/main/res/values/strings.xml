@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">BrachaAI</string>
+    <string name="overlay_last_interaction">Last Interaction</string>
+    <string name="overlay_open_tasks">Open Tasks</string>
+    <string name="overlay_more_tasks">+%1$d more</string>
+    <string name="overlay_close">Close</string>
+    <string name="overlay_permission_title">Show caller briefings</string>
+    <string name="overlay_permission_body">Allow BrachaAI to draw over other apps and you\'ll see the last summary and open tasks for a contact while they\'re calling.</string>
+    <string name="overlay_permission_enable">Enable</string>
+    <string name="overlay_permission_dismiss">Not now</string>
 </resources>

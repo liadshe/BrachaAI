@@ -7,4 +7,11 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="overlay_card_background">#FF1C2333</color>
+    <color name="overlay_card_stroke">#FF2E3950</color>
+    <color name="overlay_primary_text">#FFF2F5FA</color>
+    <color name="overlay_secondary_text">#FF9AA7BD</color>
+    <color name="overlay_accent">#FF2F6BFF</color>
+    <color name="overlay_task_bullet">#FFFF7A45</color>
+    <color name="overlay_divider">#FF2A3346</color>
 </resources>
