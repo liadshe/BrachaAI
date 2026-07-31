@@ -38,7 +38,9 @@ class AudioProcessorTest {
             authStore = authStore,
             pendingStore = pendingStore,
             callerLookup = CallerLookup(app),
-            settingsStore = settingsStore
+            settingsStore = settingsStore,
+            tokenRefresher = TokenRefresher(authStore),
+            baseUrl = BackendConfig.BASE_URL
         )
     }
 

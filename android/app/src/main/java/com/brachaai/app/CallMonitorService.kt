@@ -29,13 +29,17 @@ class CallMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // One AuthStore instance shared with the refresher: a rotated pair written by the
+        // refresher must be visible to the uploader that asked for it.
+        val authStore = AuthStore(this)
         audioProcessor = AudioProcessor(
             openAiApiKey = BuildConfig.OPENAI_API_KEY,
             cacheDir = cacheDir,
-            authStore = AuthStore(this),
+            authStore = authStore,
             pendingStore = PendingUploadStore(File(filesDir, "pending")),
             callerLookup = CallerLookup(this),
-            settingsStore = SettingsStore(this)
+            settingsStore = SettingsStore(this),
+            tokenRefresher = TokenRefresher(authStore)
         )
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannels()
