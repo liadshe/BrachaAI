@@ -30,3 +30,8 @@ export const markAnalysisFailed = async (callId: string) => {
         { returnDocument: 'after' }
     );
 };
+
+export const deleteCallsByIds = async (userId: string, ids: string[]): Promise<number> => {
+    const result = await Call.deleteMany({ _id: { $in: ids }, userId });
+    return result.deletedCount ?? 0;
+};

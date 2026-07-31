@@ -1,7 +1,12 @@
-import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useCallback, useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import apiClient from '../../services/apiClient';
 import BottomNav from '@/components/BottomNav';
+import SelectionBar from '@/components/SelectionBar';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { useMultiSelect } from '@/hooks/useMultiSelect';
+import { useSelectionBackButton } from '@/hooks/useSelectionBackButton';
+import { useCallDeletion } from '@/hooks/useCallDeletion';
 import styles from './ContactDetailsPage.module.css';
 
 interface Contact {
@@ -35,6 +40,7 @@ interface Task {
 
 const ContactDetailsPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const [contact, setContact] = useState<Contact | null>(null);
     const [calls, setCalls] = useState<Call[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
@@ -49,6 +55,32 @@ const ContactDetailsPage: React.FC = () => {
     const [editDescription, setEditDescription] = useState('');
     const [editPriority, setEditPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
     const [editDueDate, setEditDueDate] = useState('');
+
+    const callSelection = useMultiSelect();
+    const [isDeleteCallsOpen, setIsDeleteCallsOpen] = useState(false);
+    const [isDeleteContactOpen, setIsDeleteContactOpen] = useState(false);
+    const [isDeletingContact, setIsDeletingContact] = useState(false);
+    const [contactError, setContactError] = useState<string | null>(null);
+
+    // Back must also close the confirm dialog — otherwise the selection
+    // clears but the dialog stays open, now reading "Delete 0 calls?" with
+    // an enabled Delete button that would POST an empty id list.
+    const exitSelection = useCallback(() => {
+        setIsDeleteCallsOpen(false);
+        callSelection.clear();
+    }, [callSelection.clear]);
+
+    useSelectionBackButton(callSelection.isSelecting, exitSelection);
+
+    const callDeletion = useCallDeletion({
+        onDeleted: (deletedIds) => {
+            setCalls(prev => prev.filter(call => !deletedIds.has(call._id)));
+        },
+        onRefetch: async () => {
+            const callsRes = await apiClient.get('/calls');
+            setCalls(callsRes.data.filter((c: any) => c.contactId?._id === id));
+        },
+    });
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -73,6 +105,48 @@ const ContactDetailsPage: React.FC = () => {
         };
         fetchDetails();
     }, [id]);
+
+    const handleDeleteSelectedCalls = async () => {
+        await callDeletion.deleteCalls(callSelection.selectedIds);
+        callSelection.clear();
+        setIsDeleteCallsOpen(false);
+    };
+
+    const contactDeleteMessage = () => {
+        const parts: string[] = [];
+        if (calls.length > 0) {
+            parts.push(`${calls.length} ${calls.length === 1 ? 'call' : 'calls'}`);
+        }
+        if (tasks.length > 0) {
+            parts.push(`${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'}`);
+        }
+        // Omit the clause entirely rather than saying "0 calls and 0 tasks".
+        const damage = parts.length > 0 ? `This also deletes ${parts.join(' and ')}. ` : '';
+        return `${damage}This can't be undone.`;
+    };
+
+    const handleDeleteContact = async () => {
+        setIsDeletingContact(true);
+        setContactError(null);
+
+        try {
+            await apiClient.delete(`/contacts/${id}`);
+            navigate('/contacts');
+        } catch (error: any) {
+            console.error('Error deleting contact:', error);
+
+            if (error?.response?.status === 404) {
+                // Already gone (e.g. deleted from another device) — the
+                // desired end state is already reached, so just leave.
+                navigate('/contacts');
+                return;
+            }
+
+            setContactError('Could not delete this contact. Please try again.');
+            setIsDeleteContactOpen(false);
+            setIsDeletingContact(false);
+        }
+    };
 
     const toggleCallTranscript = (callId: string) => {
         setExpandedCallIds(prev => {
@@ -220,15 +294,42 @@ const ContactDetailsPage: React.FC = () => {
 
     return (
         <div className={styles.pageWrapper}>
+            {callSelection.isSelecting && (
+                <>
+                    <SelectionBar
+                        count={callSelection.count}
+                        onCancel={callSelection.clear}
+                        onDelete={() => setIsDeleteCallsOpen(true)}
+                    />
+                    <div className={styles.selectionSpacer} />
+                </>
+            )}
+
             {/* Header section matching David Cohen details screen */}
             <div className={styles.header}>
-                <Link to="/contacts" className={styles.backLink}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="19" y1="12" x2="5" y2="12"></line>
-                        <polyline points="12 19 5 12 12 5"></polyline>
-                    </svg>
-                    <span>Back to Contacts</span>
-                </Link>
+                <div className={styles.headerTopRow}>
+                    <Link to="/contacts" className={styles.backLink}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="19" y1="12" x2="5" y2="12"></line>
+                            <polyline points="12 19 5 12 12 5"></polyline>
+                        </svg>
+                        <span>Back to Contacts</span>
+                    </Link>
+
+                    <button
+                        type="button"
+                        className={styles.deleteContactBtn}
+                        onClick={() => setIsDeleteContactOpen(true)}
+                        aria-label="Delete contact"
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                    </button>
+                </div>
+
+                {contactError && <p className={styles.errorMessage}>{contactError}</p>}
 
                 <h1 className={styles.contactName}>{contact.name}</h1>
                 <div className={styles.phoneRow}>
@@ -241,15 +342,23 @@ const ContactDetailsPage: React.FC = () => {
 
             {/* Tab select bar */}
             <div className={styles.tabBar}>
-                <button 
+                <button
                     className={`${styles.tabBtn} ${activeTab === 'calls' ? styles.activeTab : ''}`}
-                    onClick={() => setActiveTab('calls')}
+                    onClick={() => {
+                        // Also closes the delete-calls dialog if it was open,
+                        // for the same reason Back does (see exitSelection).
+                        exitSelection();
+                        setActiveTab('calls');
+                    }}
                 >
                     Calls
                 </button>
-                <button 
+                <button
                     className={`${styles.tabBtn} ${activeTab === 'tasks' ? styles.activeTab : ''}`}
-                    onClick={() => setActiveTab('tasks')}
+                    onClick={() => {
+                        exitSelection();
+                        setActiveTab('tasks');
+                    }}
                 >
                     Tasks
                 </button>
@@ -258,11 +367,16 @@ const ContactDetailsPage: React.FC = () => {
             <main className={styles.mainContent}>
                 {activeTab === 'calls' ? (
                     <div className={styles.tabContentList}>
+                        {callDeletion.error && <p className={styles.errorMessage}>{callDeletion.error}</p>}
                         {calls.length > 0 ? (
                             calls.map((call) => {
                                 const isExpanded = expandedCallIds.has(call._id);
                                 return (
-                                    <div key={call._id} className={styles.callCard}>
+                                    <div
+                                        key={call._id}
+                                        className={`${styles.callCard} ${styles.selectableCard} ${callSelection.isSelected(call._id) ? styles.selectedCard : ''}`}
+                                        {...callSelection.getItemProps(call._id)}
+                                    >
                                         <div className={styles.callHeader}>
                                             <div className={styles.callTypeSection}>
                                                 <div className={styles.callIconBox}>
@@ -280,8 +394,12 @@ const ContactDetailsPage: React.FC = () => {
 
                                         <p className={styles.callSummary}>{call.callSummary || 'No summary available.'}</p>
 
-                                        <button 
-                                            onClick={() => toggleCallTranscript(call._id)} 
+                                        <button
+                                            onClick={(e) => {
+                                                if (callSelection.isSelecting) return;
+                                                e.stopPropagation();
+                                                toggleCallTranscript(call._id);
+                                            }}
                                             className={styles.viewTranscriptBtn}
                                         >
                                             {isExpanded ? 'Hide transcript' : 'View transcript'} &rarr;
@@ -442,6 +560,26 @@ const ContactDetailsPage: React.FC = () => {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {isDeleteCallsOpen && (
+                <ConfirmDialog
+                    title={`Delete ${callSelection.count} ${callSelection.count === 1 ? 'call' : 'calls'}?`}
+                    message="This can't be undone."
+                    busy={callDeletion.isDeleting}
+                    onCancel={() => setIsDeleteCallsOpen(false)}
+                    onConfirm={handleDeleteSelectedCalls}
+                />
+            )}
+
+            {isDeleteContactOpen && (
+                <ConfirmDialog
+                    title={`Delete ${contact.name}?`}
+                    message={contactDeleteMessage()}
+                    busy={isDeletingContact}
+                    onCancel={() => setIsDeleteContactOpen(false)}
+                    onConfirm={handleDeleteContact}
+                />
             )}
 
             <BottomNav />
