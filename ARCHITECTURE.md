@@ -58,6 +58,14 @@ The native Android application handles device-level interactions.
 *   **`AudioProcessor`**: Orchestrates the processing pipeline: parsing the filename, converting audio to MP3 via FFmpeg, and sending it for transcription.
 *   **`WhisperApiClient`**: A dedicated client for sending audio to the OpenAI Whisper API and receiving the Hebrew transcription.
 *   **`MainActivity`**: The main UI entry point, responsible for requesting permissions and hosting the WebView that renders the frontend application.
+*   **`PhoneStateReceiver`**: A manifest-registered broadcast receiver for `ACTION_PHONE_STATE_CHANGED`, the entry point of the incoming-call briefing overlay. It shows a card on RINGING and tears it down on IDLE.
+*   **`OverlayDecider`**: Pure decision logic, with no Android dependencies, that turns a ringing number into "show this briefing" or "show nothing" — so every branch of the ring path is unit-testable without the receiver or the service around it.
+*   **`CallOverlayService`**: Renders the briefing as a floating `WindowManager` card for the duration of the call, and refreshes it live from the backend while it is on screen. Requires the `SYSTEM_ALERT_WINDOW` permission.
+*   **`BriefingNotifier`**: The fallback renderer, used when the overlay permission is not held. Posts the same briefing as a silent high-importance notification.
+*   **`BriefingStore`**: The on-device snapshot (`briefings.json`) that the overlay reads when the phone rings, so a ringing call never has to wait on the network. Disposable derived data: a corrupt or missing snapshot means "no card until the next sync", never data loss.
+*   **`BriefingSync`**: Refreshes that snapshot from the backend on a periodic tick, after an upload, and when the app returns to the foreground.
+*   **`BriefingClient`**: A dedicated client for the backend's briefing endpoints, sharing the upload path's token-refresh handling.
+*   **`PhoneNormalizer`**: Reduces every spelling of a phone number — with or without a country code, with a leading zero, withheld-call sentinels — to a single lookup key. The only place phone formats are interpreted, and the reason contact matching never has to happen on the backend.
 *   **`app/src/main/assets/www/`**: This directory contains the production build of the frontend application. The GitHub Actions workflow automatically builds the frontend and copies the assets here, enabling the hybrid app approach.
 
 ### 3.2. `backend/`
