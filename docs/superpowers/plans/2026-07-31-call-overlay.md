@@ -2137,8 +2137,11 @@ object BriefingNotifier {
 
         val lines = buildList {
             briefing.lastCallSummary?.takeIf { it.isNotBlank() }?.let(::add)
-            briefing.openTasks.take(CallOverlayService.MAX_TASKS_SHOWN).forEach { add("• ${it.title}") }
-            val hidden = briefing.openTaskCount - CallOverlayService.MAX_TASKS_SHOWN
+            val shown = briefing.openTasks.take(CallOverlayService.MAX_TASKS_SHOWN)
+            shown.forEach { add("• ${it.title}") }
+            // Subtract what was actually shown, not the cap — the two renderers must not
+            // disagree about the same number if the list is ever shorter than the cap.
+            val hidden = briefing.openTaskCount - shown.size
             if (hidden > 0) add(context.getString(R.string.overlay_more_tasks, hidden))
         }
 
@@ -2321,7 +2324,9 @@ class CallOverlayService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = 48
+            // LayoutParams.y is in PIXELS, unlike every dp value in the layout XML. Convert
+            // explicitly — a bare integer here means a different offset on every density.
+            y = (OVERLAY_TOP_MARGIN_DP * resources.displayMetrics.density).toInt()
         }
 
         return try {
@@ -2403,6 +2408,9 @@ class CallOverlayService : Service() {
 
         /** Kept small so the card cannot grow tall enough to cover the answer control. */
         const val MAX_TASKS_SHOWN = 3
+
+        /** Gap below the status bar, in dp — converted to px at attach time. */
+        private const val OVERLAY_TOP_MARGIN_DP = 48f
 
         /**
          * Backstop only — a dropped call-ended broadcast must not strand a card forever.
