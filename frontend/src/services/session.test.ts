@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import MockAdapter from 'axios-mock-adapter';
 import apiClient from './apiClient';
-import { establishSession, endSession } from './session';
+import { establishSession, endSession, provisionNativeSession } from './session';
 import { getAccessToken, getRefreshToken, setSession } from './authTokens';
 
 const clientMock = new MockAdapter(apiClient);
@@ -46,6 +46,63 @@ describe('establishSession', () => {
         });
 
         expect(getAccessToken()).toBe('web-access');
+        expect(setAuth).not.toHaveBeenCalled();
+    });
+
+    it('throws and does not store anything when the refreshToken is missing', async () => {
+        await expect(
+            establishSession({
+                token: 'web-access',
+                refreshToken: undefined as unknown as string,
+                user: { id: '1' },
+            })
+        ).rejects.toThrow();
+
+        expect(getAccessToken()).toBeNull();
+        expect(getRefreshToken()).toBeNull();
+        expect(setAuth).not.toHaveBeenCalled();
+    });
+
+    it('throws and does not store anything when the token is missing', async () => {
+        await expect(
+            establishSession({
+                token: undefined as unknown as string,
+                refreshToken: 'web-refresh',
+                user: { id: '1' },
+            })
+        ).rejects.toThrow();
+
+        expect(getAccessToken()).toBeNull();
+        expect(getRefreshToken()).toBeNull();
+        expect(setAuth).not.toHaveBeenCalled();
+    });
+});
+
+describe('provisionNativeSession', () => {
+    it('calls device-token and hands native the pair when the bridge is present', async () => {
+        clientMock.onPost('/auth/device-token').reply(200, {
+            token: 'native-access',
+            refreshToken: 'native-refresh',
+        });
+
+        await provisionNativeSession();
+
+        expect(setAuth).toHaveBeenCalledWith('native-access', 'native-refresh');
+    });
+
+    it('is a no-op when window.BrachaNative is absent', async () => {
+        (window as any).BrachaNative = undefined;
+
+        await expect(provisionNativeSession()).resolves.toBeUndefined();
+
+        expect(clientMock.history.post.length).toBe(0);
+    });
+
+    it('never throws when device-token fails', async () => {
+        clientMock.onPost('/auth/device-token').reply(500);
+
+        await expect(provisionNativeSession()).resolves.toBeUndefined();
+
         expect(setAuth).not.toHaveBeenCalled();
     });
 });

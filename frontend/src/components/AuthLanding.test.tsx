@@ -1,7 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import MockAdapter from 'axios-mock-adapter';
+import apiClient from '@/services/apiClient';
 import AuthLanding from './AuthLanding';
+
+const clientMock = new MockAdapter(apiClient);
+const setAuth = vi.fn();
+const clearAuth = vi.fn();
 
 const renderAt = () =>
     render(
@@ -16,6 +22,10 @@ const renderAt = () =>
 
 beforeEach(() => {
     localStorage.clear();
+    clientMock.reset();
+    setAuth.mockReset();
+    clearAuth.mockReset();
+    (window as any).BrachaNative = { setAuth, clearAuth };
 });
 
 describe('AuthLanding', () => {
@@ -35,5 +45,46 @@ describe('AuthLanding', () => {
         localStorage.setItem('token', '');
         renderAt();
         expect(screen.getByText('LOGIN')).toBeTruthy();
+    });
+
+    // Native's token is never refreshed by login again once a stored token sends the
+    // user straight home, so this boot-time top-up is the only thing keeping it alive.
+    it('provisions the native session when a token is present', async () => {
+        localStorage.setItem('token', 'stored-token');
+        clientMock.onPost('/auth/device-token').reply(200, {
+            token: 'native-access',
+            refreshToken: 'native-refresh',
+        });
+
+        renderAt();
+
+        await waitFor(() => {
+            expect(setAuth).toHaveBeenCalledWith('native-access', 'native-refresh');
+        });
+    });
+
+    it('does not provision the native session when there is no token', async () => {
+        renderAt();
+
+        // Nothing to await on, so give any stray microtask a turn before asserting.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(clientMock.history.post.length).toBe(0);
+        expect(setAuth).not.toHaveBeenCalled();
+    });
+
+    it('still navigates home immediately even if device-token provisioning fails', async () => {
+        localStorage.setItem('token', 'stored-token');
+        clientMock.onPost('/auth/device-token').reply(500);
+
+        renderAt();
+
+        // The redirect must not wait on the network call.
+        expect(screen.getByText('HOME')).toBeTruthy();
+
+        await waitFor(() => {
+            expect(clientMock.history.post.length).toBe(1);
+        });
+        expect(setAuth).not.toHaveBeenCalled();
     });
 });
