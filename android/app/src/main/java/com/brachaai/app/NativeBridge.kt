@@ -21,15 +21,20 @@ class NativeBridge(
     private val authStore = AuthStore(appContext)
     private val settingsStore = SettingsStore(appContext)
 
+    /**
+     * Receives the *native* token pair, minted by the web app via /auth/device-token.
+     * Native deliberately holds its own pair rather than the web session's: refresh tokens
+     * rotate per client, so sharing one would have the two clients invalidate each other.
+     */
     @JavascriptInterface
-    fun setAuth(token: String?) {
-        if (token.isNullOrBlank()) {
+    fun setAuth(token: String?, refreshToken: String?) {
+        if (token.isNullOrBlank() || refreshToken.isNullOrBlank()) {
             authStore.clear()
-            Log.d(TAG, "setAuth called with empty token; cleared")
+            Log.d(TAG, "setAuth called with an incomplete pair; cleared")
             return
         }
-        authStore.setToken(token)
-        Log.d(TAG, "Auth token stored from WebView")
+        authStore.setTokens(token, refreshToken)
+        Log.d(TAG, "Auth tokens stored from WebView")
         onAuthenticated()
     }
 
