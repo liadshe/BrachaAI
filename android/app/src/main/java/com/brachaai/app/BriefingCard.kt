@@ -9,30 +9,15 @@ import android.widget.TextView
 /**
  * Paints a briefing into an inflated `overlay_call_briefing.xml`.
  *
- * Shared by the two things that can put the card on screen: [CallOverlayService]'s
- * `WindowManager` window when the device is unlocked, and [CallOverlayActivity] when it is
- * locked. A `TYPE_APPLICATION_OVERLAY` window cannot be shown above the keyguard at all —
- * that capability belongs to `Activity.setShowWhenLocked`, so the locked case has to be an
- * Activity — but the card is meant to look identical either side of the lock. Keeping the
- * binding in one place is what stops the two renderers drifting apart.
+ * Kept separate from [CallOverlayService] so the card's appearance can be reasoned about
+ * without the window plumbing around it — the service owns *where* the card goes, this owns
+ * *what it says*.
  *
  * Sets `root.tag` to the contact id: [CallOverlayService] reads it back to discard a live
  * refresh that arrives after the card has moved on to a different caller.
  */
-fun bindBriefingCard(
-    context: Context,
-    root: View,
-    briefing: Briefing,
-    showCallActions: Boolean = false,
-) {
+fun bindBriefingCard(context: Context, root: View, briefing: Briefing) {
     root.tag = briefing.contactId
-
-    // Only the locked card carries Answer/Decline. It takes the foreground, which pauses the
-    // dialer and stops it acting on its own answer gesture, so it has to offer the way out
-    // itself. The unlocked card never takes the foreground, so the real dialer is still live
-    // underneath and a duplicate set of controls would be redundant.
-    root.findViewById<View>(R.id.overlay_actions).visibility =
-        if (showCallActions) View.VISIBLE else View.GONE
     root.findViewById<TextView>(R.id.overlay_name).text = briefing.name
 
     val summary = briefing.lastCallSummary?.takeIf { it.isNotBlank() }

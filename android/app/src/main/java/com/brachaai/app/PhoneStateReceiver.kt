@@ -57,27 +57,12 @@ class PhoneStateReceiver : BroadcastReceiver() {
             is OverlayAction.Show -> when {
                 action.asNotification -> BriefingNotifier.show(context, action.briefing)
 
-                // A TYPE_APPLICATION_OVERLAY window is layered BELOW the keyguard, so on a
-                // locked phone CallOverlayService draws a card nobody can see. Showing above
-                // the keyguard is an Activity capability (setShowWhenLocked), so the locked
-                // case takes CallOverlayActivity.
-                //
-                // canHandleCalls is a safety gate, not a feature check. That Activity takes
-                // the foreground, which pauses the dialer, and a paused call screen ignores
-                // its own answer gesture — so the card must be able to answer the call
-                // itself. Without ANSWER_PHONE_CALLS it cannot, and showing it anyway would
-                // leave the user unable to take the call. Measured on device; do not relax
-                // this condition.
-                CallOverlayActivity.isDeviceLocked(context) &&
-                    CallOverlayActivity.canHandleCalls(context) ->
-                    CallOverlayActivity.show(context, PhoneNormalizer.key(number)!!)
-
-                // Locked, but we could not answer the call for them. The notification shows
-                // on the lock screen without ever owning the foreground, so the dialer stays
-                // fully usable.
-                CallOverlayActivity.isDeviceLocked(context) ->
-                    BriefingNotifier.show(context, action.briefing)
-
+                // One path, locked or not: CallOverlayService's window carries
+                // FLAG_SHOW_WHEN_LOCKED, so it sits above the keyguard without ever taking
+                // the foreground — which is what leaves the dialer's own answer and decline
+                // controls working. There was briefly a separate Activity for the locked
+                // case; it paused the dialer and made calls unanswerable. Do not reintroduce
+                // one.
                 else -> CallOverlayService.show(context, PhoneNormalizer.key(number)!!)
             }
         }
@@ -86,7 +71,6 @@ class PhoneStateReceiver : BroadcastReceiver() {
     /** Every renderer is cleared: whichever one is up, the call is over. */
     private fun dismiss(context: Context) {
         CallOverlayService.dismiss(context)
-        CallOverlayActivity.dismiss(context)
         BriefingNotifier.dismiss(context)
     }
 

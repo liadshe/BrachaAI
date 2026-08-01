@@ -145,8 +145,23 @@ class CallOverlayService : Service() {
                 WindowManager.LayoutParams.TYPE_PHONE
             },
             // NOT_FOCUSABLE keeps key events with the dialer; the card is still clickable.
+            //
+            // SHOW_WHEN_LOCKED is what puts this card over the lock screen. It is deprecated
+            // for *Activities* — the docs send you to Activity.setShowWhenLocked — but this is
+            // not an Activity, and for a WindowManager window it remains the only way to sit
+            // above the keyguard. Chasing the Activity route instead cost a day: an Activity
+            // over a ring pauses the dialer, and a paused call screen ignores its own answer
+            // gesture, so the card appeared and the phone could not be answered. An overlay
+            // never takes the foreground, so the native answer and decline controls keep
+            // working exactly as they do when the phone is unlocked.
+            //
+            // TURN_SCREEN_ON wakes the display for the card, matching what the incoming call
+            // does anyway.
+            @Suppress("DEPRECATION")
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -175,10 +190,6 @@ class CallOverlayService : Service() {
         }
     }
 
-    /**
-     * Delegates to [bindBriefingCard], which [CallOverlayActivity] also uses — the locked and
-     * unlocked cards must be indistinguishable, and one binder is what guarantees that.
-     */
     private fun bind(root: View, briefing: Briefing) = bindBriefingCard(this, root, briefing)
 
     private fun openContact(contactId: String?) {

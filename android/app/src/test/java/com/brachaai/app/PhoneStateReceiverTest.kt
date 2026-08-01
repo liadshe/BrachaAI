@@ -1,6 +1,5 @@
 package com.brachaai.app
 
-import android.Manifest
 import android.app.Application
 import android.app.KeyguardManager
 import android.app.Notification
@@ -78,48 +77,26 @@ class PhoneStateReceiverTest {
     }
 
     @Test
-    fun `a locked phone shows the activity once it can answer calls itself`() {
-        // The WindowManager card is invisible under the keyguard, so the locked case needs an
-        // Activity — but only once it holds ANSWER_PHONE_CALLS, because taking the foreground
-        // pauses the dialer and the card then has to offer the way out itself.
-        setLocked(true)
-        shadowOf(context).grantPermissions(Manifest.permission.ANSWER_PHONE_CALLS)
-
-        broadcast(TelephonyManager.EXTRA_STATE_RINGING, "+972501234567")
-
-        assertNull("the WindowManager card is invisible under the keyguard", nextService())
-        assertEquals(
-            CallOverlayActivity::class.java.name,
-            nextActivity()?.component?.className,
-        )
-    }
-
-    @Test
-    fun `a locked phone falls back to a notification when it cannot answer calls`() {
-        // ANSWER_PHONE_CALLS is deliberately NOT granted here. Starting the Activity without
-        // it would take the foreground, pause the dialer and leave no way to accept the call
-        // — a card that costs the user the ability to answer is worse than no card at all.
+    fun `a locked phone takes the same overlay path as an unlocked one`() {
+        // The overlay window carries FLAG_SHOW_WHEN_LOCKED, so one path serves both. Nothing
+        // here may start an Activity: an Activity over a ring pauses the dialer, and a paused
+        // call screen ignores its own answer gesture, so the call becomes unanswerable.
+        // Measured on device — this assertion is the regression guard for it.
         setLocked(true)
 
         broadcast(TelephonyManager.EXTRA_STATE_RINGING, "+972501234567")
 
-        assertNull("the WindowManager card is invisible under the keyguard", nextService())
+        val started = nextService()
+        assertEquals(CallOverlayService::class.java.name, started?.component?.className)
+        assertEquals(CallOverlayService.ACTION_SHOW, started?.action)
         assertNull("an Activity over the ring makes the call unanswerable", nextActivity())
-
-        val manager = context.getSystemService(NotificationManager::class.java)
-        assertTrue(
-            "the lock screen shows notifications without owning the foreground",
-            shadowOf(manager).allNotifications.isNotEmpty(),
-        )
     }
 
     @Test
-    fun `the notification fallback wins over the locked path when the overlay permission is missing`() {
-        // Without SYSTEM_ALERT_WINDOW there is no card to show on either side of the lock, so
-        // neither the keyguard state nor the ability to answer may promote the Activity over
-        // the notification.
+    fun `the notification fallback still wins on a locked phone without the overlay permission`() {
+        // Without SYSTEM_ALERT_WINDOW there is no card to show on either side of the lock,
+        // and the keyguard state must not change that.
         setLocked(true)
-        shadowOf(context).grantPermissions(Manifest.permission.ANSWER_PHONE_CALLS)
         ShadowSettings.setCanDrawOverlays(false)
 
         broadcast(TelephonyManager.EXTRA_STATE_RINGING, "+972501234567")

@@ -14,12 +14,6 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <!--
-      Lets the locked-screen briefing card answer and decline calls itself. That card takes
-      the foreground, which pauses the dialer and stops it acting on its own answer gesture,
-      so without this the phone could not be answered while the card was up.
-    -->
-    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
@@ -44,26 +38,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!--
-          The briefing card for a locked screen. showWhenLocked/turnScreenOn are the API 27+
-          manifest form of what the Activity also sets in code; harmless on 26, which takes
-          the deprecated window-flag path instead.
-
-          taskAffinity="" and excludeFromRecents keep this out of MainActivity's task and out
-          of the recents list — it is a transient card tied to one ringing call, not a screen
-          the user navigates to. configChanges stops a rotation mid-ring from recreating it.
-        -->
-        <activity
-            android:name=".CallOverlayActivity"
-            android:exported="false"
-            android:theme="@style/Theme.BrachaAI.CallOverlay"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
-            android:excludeFromRecents="true"
-            android:taskAffinity=""
-            android:launchMode="singleTop"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <service
             android:name=".CallMonitorService"

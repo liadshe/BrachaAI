@@ -4,9 +4,6 @@
     <string name="overlay_open_tasks">Open Tasks</string>
     <string name="overlay_more_tasks">+%1$d more</string>
     <string name="overlay_close">Close</string>
-    <string name="overlay_answer">Answer</string>
-    <string name="overlay_decline">Decline</string>
-    <string name="overlay_answer_failed">Could not answer the call</string>
     <string name="overlay_permission_title">Know why they\'re calling</string>
     <!--
       Quotes Android's own wording for the toggle on purpose — the button opens a Settings
