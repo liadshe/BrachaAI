@@ -1,6 +1,7 @@
 package com.brachaai.app
 
 import android.app.Application
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Intent
@@ -27,6 +28,9 @@ class PhoneStateReceiverTest {
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
         shadowOf(context).clearStartedServices()
+        // Unlocked is the default here so the WindowManager path stays the one under test;
+        // the locked case opts in explicitly (see the keyguard test below).
+        setLocked(false)
         // The overlay path is the primary path this feature exists for, so it is the default
         // for every test here unless a test explicitly opts out (see the fallback test below).
         ShadowSettings.setCanDrawOverlays(true)
@@ -55,6 +59,14 @@ class PhoneStateReceiverTest {
     private fun nextService(): Intent? =
         shadowOf(context).nextStartedService
 
+    private fun nextActivity(): Intent? =
+        shadowOf(context).nextStartedActivity
+
+    private fun setLocked(locked: Boolean) {
+        shadowOf(context.getSystemService(KeyguardManager::class.java))
+            .setKeyguardLocked(locked)
+    }
+
     @Test
     fun `a ringing known contact starts the overlay service`() {
         broadcast(TelephonyManager.EXTRA_STATE_RINGING, "+972501234567")
@@ -62,6 +74,36 @@ class PhoneStateReceiverTest {
         val started = nextService()
         assertEquals(CallOverlayService::class.java.name, started?.component?.className)
         assertEquals(CallOverlayService.ACTION_SHOW, started?.action)
+    }
+
+    @Test
+    fun `a ringing known contact on a locked phone starts the activity, not the service`() {
+        // A TYPE_APPLICATION_OVERLAY window is layered below the keyguard, so the service
+        // would draw a card nobody can see. Only an Activity can show above the lock screen.
+        setLocked(true)
+
+        broadcast(TelephonyManager.EXTRA_STATE_RINGING, "+972501234567")
+
+        assertNull("the WindowManager card is invisible under the keyguard", nextService())
+        assertEquals(
+            CallOverlayActivity::class.java.name,
+            nextActivity()?.component?.className,
+        )
+    }
+
+    @Test
+    fun `the notification fallback wins over the locked path when the overlay permission is missing`() {
+        // Without SYSTEM_ALERT_WINDOW there is no card to show on either side of the lock,
+        // so the keyguard state must not promote the Activity over the notification.
+        setLocked(true)
+        ShadowSettings.setCanDrawOverlays(false)
+
+        broadcast(TelephonyManager.EXTRA_STATE_RINGING, "+972501234567")
+
+        assertNull(nextService())
+        assertNull(nextActivity())
+        val manager = context.getSystemService(NotificationManager::class.java)
+        assertTrue(shadowOf(manager).allNotifications.isNotEmpty())
     }
 
     @Test

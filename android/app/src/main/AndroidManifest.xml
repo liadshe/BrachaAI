@@ -39,6 +39,26 @@
             </intent-filter>
         </activity>
 
+        <!--
+          The briefing card for a locked screen. showWhenLocked/turnScreenOn are the API 27+
+          manifest form of what the Activity also sets in code; harmless on 26, which takes
+          the deprecated window-flag path instead.
+
+          taskAffinity="" and excludeFromRecents keep this out of MainActivity's task and out
+          of the recents list — it is a transient card tied to one ringing call, not a screen
+          the user navigates to. configChanges stops a rotation mid-ring from recreating it.
+        -->
+        <activity
+            android:name=".CallOverlayActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BrachaAI.CallOverlay"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
         <service
             android:name=".CallMonitorService"
             android:foregroundServiceType="dataSync"

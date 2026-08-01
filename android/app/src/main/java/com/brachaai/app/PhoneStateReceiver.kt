@@ -53,18 +53,27 @@ class PhoneStateReceiver : BroadcastReceiver() {
         when (val action = decider.decide(number, CallOverlayService.canDrawOverlays(context))) {
             is OverlayAction.DoNothing -> Log.d(TAG, "Nothing to show for this caller")
 
-            is OverlayAction.Show -> if (action.asNotification) {
-                BriefingNotifier.show(context, action.briefing)
-            } else {
-                // The service re-reads the briefing itself, so no model crosses the Intent.
-                CallOverlayService.show(context, PhoneNormalizer.key(number)!!)
+            // Both renderers re-read the briefing themselves, so no model crosses an Intent.
+            is OverlayAction.Show -> when {
+                action.asNotification -> BriefingNotifier.show(context, action.briefing)
+
+                // A TYPE_APPLICATION_OVERLAY window is layered BELOW the keyguard, so on a
+                // locked phone CallOverlayService draws a card nobody can see. Showing above
+                // the keyguard is an Activity capability (setShowWhenLocked), so the locked
+                // case takes the Activity. Same layout, same position — the user should not
+                // be able to tell which one they got.
+                CallOverlayActivity.isDeviceLocked(context) ->
+                    CallOverlayActivity.show(context, PhoneNormalizer.key(number)!!)
+
+                else -> CallOverlayService.show(context, PhoneNormalizer.key(number)!!)
             }
         }
     }
 
-    /** Both renderers are cleared: whichever is up, the call is over. */
+    /** Every renderer is cleared: whichever one is up, the call is over. */
     private fun dismiss(context: Context) {
         CallOverlayService.dismiss(context)
+        CallOverlayActivity.dismiss(context)
         BriefingNotifier.dismiss(context)
     }
 

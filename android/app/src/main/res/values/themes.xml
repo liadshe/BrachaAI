@@ -2,4 +2,21 @@
 <resources>
 
     <style name="Theme.BrachaAI" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!--
+      The locked-screen briefing card. Floating and translucent so the Activity's window
+      wraps the card instead of claiming the screen: everything outside it stays visible,
+      and CallOverlayActivity adds FLAG_NOT_TOUCH_MODAL so it stays touchable too. Dimming
+      and the close-on-touch-outside behaviour are both off — dimming would grey out the
+      dialer behind, and a stray tap near the answer button must not silently kill the card.
+    -->
+    <style name="Theme.BrachaAI.CallOverlay" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowCloseOnTouchOutside">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

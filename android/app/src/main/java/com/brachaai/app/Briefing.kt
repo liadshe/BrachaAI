@@ -34,6 +34,19 @@ const val MAX_TASKS_SHOWN = 3
 val MAX_BRIEFING_LIFETIME_MS: Long = TimeUnit.MINUTES.toMillis(30)
 
 /**
+ * Gap between the top of the screen and the card, in dp.
+ *
+ * Shared by both renderers so the card lands in the same place whether it is a
+ * `WindowManager` window (unlocked) or an Activity over the keyguard (locked) — the point of
+ * the locked path is that the user cannot tell the difference.
+ *
+ * Both apply it to a `WindowManager.LayoutParams.y`, which is denominated in raw PIXELS
+ * unlike every dp value in the layout XML, so both must convert it through
+ * `resources.displayMetrics.density`.
+ */
+const val OVERLAY_TOP_MARGIN_DP = 48
+
+/**
  * What the overlay shows for one contact: who they are, what was last discussed, what is
  * still open.
  *

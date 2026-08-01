@@ -14,8 +14,6 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
-import android.widget.LinearLayout
-import android.widget.TextView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -177,38 +175,11 @@ class CallOverlayService : Service() {
         }
     }
 
-    private fun bind(root: View, briefing: Briefing) {
-        root.tag = briefing.contactId
-        root.findViewById<TextView>(R.id.overlay_name).text = briefing.name
-
-        val summary = briefing.lastCallSummary?.takeIf { it.isNotBlank() }
-        root.findViewById<View>(R.id.overlay_summary_section).visibility =
-            if (summary == null) View.GONE else View.VISIBLE
-        summary?.let { root.findViewById<TextView>(R.id.overlay_summary).text = it }
-
-        val shown = briefing.openTasks.take(MAX_TASKS_SHOWN)
-        root.findViewById<View>(R.id.overlay_tasks_section).visibility =
-            if (shown.isEmpty()) View.GONE else View.VISIBLE
-
-        val container = root.findViewById<LinearLayout>(R.id.overlay_tasks)
-        container.removeAllViews()
-        val inflater = LayoutInflater.from(this)
-        shown.forEach { task ->
-            val row = inflater.inflate(R.layout.overlay_task_item, container, false)
-            row.findViewById<TextView>(R.id.overlay_task_title).text = task.title
-            container.addView(row)
-        }
-
-        // Counted from the untruncated total, not the list, which is capped twice over.
-        val hidden = briefing.openTaskCount - shown.size
-        val more = root.findViewById<TextView>(R.id.overlay_more_tasks)
-        if (hidden > 0) {
-            more.text = getString(R.string.overlay_more_tasks, hidden)
-            more.visibility = View.VISIBLE
-        } else {
-            more.visibility = View.GONE
-        }
-    }
+    /**
+     * Delegates to [bindBriefingCard], which [CallOverlayActivity] also uses — the locked and
+     * unlocked cards must be indistinguishable, and one binder is what guarantees that.
+     */
+    private fun bind(root: View, briefing: Briefing) = bindBriefingCard(this, root, briefing)
 
     private fun openContact(contactId: String?) {
         if (contactId.isNullOrBlank()) return
@@ -245,9 +216,6 @@ class CallOverlayService : Service() {
         internal const val ACTION_SHOW = "com.brachaai.app.action.SHOW_OVERLAY"
         internal const val ACTION_DISMISS = "com.brachaai.app.action.DISMISS_OVERLAY"
         private const val EXTRA_PHONE_KEY = "com.brachaai.app.extra.PHONE_KEY"
-
-        /** Target top offset for the card, in dp — converted to px against display density. */
-        private const val OVERLAY_TOP_MARGIN_DP = 48
 
         fun canDrawOverlays(context: Context): Boolean = Settings.canDrawOverlays(context)
 
