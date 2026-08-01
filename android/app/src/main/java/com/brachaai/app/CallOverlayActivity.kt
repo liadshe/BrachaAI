@@ -50,6 +50,20 @@ class CallOverlayActivity : Activity() {
 
     private var root: View? = null
 
+    /** The key currently displayed, so a re-assert can rebuild the same card. */
+    private var phoneKey: String? = null
+
+    /**
+     * Whether this card has already fought for the foreground once.
+     *
+     * Telecom launches the dialer's full-screen incoming-call activity a moment *after* the
+     * PHONE_STATE broadcast this card reacts to, so the dialer resumes second and covers us.
+     * Coming back once, after it settles, wins the exchange. Exactly once, though: if it
+     * covers us again the dialer genuinely owns the screen, and a second attempt would turn
+     * into a visible flicker war that makes the phone feel broken.
+     */
+    private var hasReasserted = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         showAboveKeyguard()
@@ -122,9 +136,31 @@ class CallOverlayActivity : Activity() {
         }
     }
 
+    /**
+     * Reclaims the foreground after the dialer's call screen has covered this card.
+     *
+     * See [hasReasserted] for why this happens at all, and why it happens only once.
+     */
+    override fun onStop() {
+        super.onStop()
+        if (hasReasserted || isFinishing) return
+        val key = phoneKey ?: return
+
+        hasReasserted = true
+        mainHandler.postDelayed({
+            // isFinishing covers the ordinary endings — the call ended, the user tapped the
+            // card or its X — so a teardown that lands inside this delay is not undone.
+            if (!isFinishing) {
+                Log.d(TAG, "Card was covered by the call screen; reclaiming the foreground")
+                show(this, key)
+            }
+        }, REASSERT_DELAY_MS)
+    }
+
     /** @return false when there was nothing worth showing and the card has been finished. */
     private fun render(intent: Intent?): Boolean {
         val phoneKey = intent?.getStringExtra(EXTRA_PHONE_KEY)
+        this.phoneKey = phoneKey
         val briefing = phoneKey?.let { BriefingStore.default(filesDir).lookup(it) }
 
         // Re-applied here for the same reason CallOverlayService re-applies it: the receiver
@@ -166,6 +202,16 @@ class CallOverlayActivity : Activity() {
 
         /** Internal rather than private so the receiver test can assert on it. */
         internal const val ACTION_DISMISS = "com.brachaai.app.action.DISMISS_LOCKED_OVERLAY"
+
+        /**
+         * How long to wait before reclaiming the foreground from the dialer's call screen.
+         *
+         * Long enough that the dialer has finished resuming — coming back too early just
+         * loses the same race again — and short enough that the card is back before the user
+         * has looked away. Tuned by hand on device; there is no callback that says "the call
+         * screen has settled".
+         */
+        private const val REASSERT_DELAY_MS = 700L
 
         /**
          * True when the keyguard is up, i.e. the `WindowManager` card would be drawn
