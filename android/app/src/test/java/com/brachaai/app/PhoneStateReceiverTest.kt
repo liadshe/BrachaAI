@@ -77,17 +77,22 @@ class PhoneStateReceiverTest {
     }
 
     @Test
-    fun `a ringing known contact on a locked phone starts the activity, not the service`() {
-        // A TYPE_APPLICATION_OVERLAY window is layered below the keyguard, so the service
-        // would draw a card nobody can see. Only an Activity can show above the lock screen.
+    fun `a ringing known contact on a locked phone falls back to a notification`() {
+        // The WindowManager card is invisible under the keyguard, and the Activity that can
+        // show above it pauses the dialer, which then stops accepting the answer gesture —
+        // measured on device. Nothing here may start an Activity during a ring: a card that
+        // costs the user the ability to answer is worse than no card at all.
         setLocked(true)
 
         broadcast(TelephonyManager.EXTRA_STATE_RINGING, "+972501234567")
 
         assertNull("the WindowManager card is invisible under the keyguard", nextService())
-        assertEquals(
-            CallOverlayActivity::class.java.name,
-            nextActivity()?.component?.className,
+        assertNull("an Activity over the ring makes the call unanswerable", nextActivity())
+
+        val manager = context.getSystemService(NotificationManager::class.java)
+        assertTrue(
+            "the lock screen shows notifications without owning the foreground",
+            shadowOf(manager).allNotifications.isNotEmpty(),
         )
     }
 

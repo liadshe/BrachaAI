@@ -18,6 +18,20 @@ import android.view.WindowManager
 /**
  * The briefing card, shown over a *locked* screen.
  *
+ * **NOT CURRENTLY ROUTED TO — see [PhoneStateReceiver].** It works: it appears above the
+ * keyguard and, after one re-assert, stays above the dialer's call screen. The blocker is
+ * that an Activity on top *pauses* the dialer, and a paused call screen stops acting on the
+ * answer gesture. `FLAG_NOT_TOUCH_MODAL` delivers those touches to it, but it ignores them.
+ * Verified on device: card visible, call unanswerable. A card that stops you answering your
+ * phone is worse than no card, so the locked case falls back to a notification.
+ *
+ * To re-enable, this has to stop depending on the dialer being interactive and answer the
+ * call itself: `ANSWER_PHONE_CALLS` (a dangerous, runtime-granted permission) plus
+ * `TelecomManager.acceptRingingCall()` / `endCall()`, and its own Answer and Decline
+ * controls on the card. That is how caller-ID apps get away with owning the foreground
+ * during a ring. It is a real feature, not a tweak — it changes this from something that
+ * shows information into something that handles your calls.
+ *
  * [CallOverlayService] draws the same card as a `TYPE_APPLICATION_OVERLAY` window, which the
  * platform layers *below* the keyguard — no flag changes that, so on a locked phone that card
  * renders where nobody can see it. Showing above the keyguard is an Activity capability

@@ -59,11 +59,20 @@ class PhoneStateReceiver : BroadcastReceiver() {
 
                 // A TYPE_APPLICATION_OVERLAY window is layered BELOW the keyguard, so on a
                 // locked phone CallOverlayService draws a card nobody can see. Showing above
-                // the keyguard is an Activity capability (setShowWhenLocked), so the locked
-                // case takes the Activity. Same layout, same position — the user should not
-                // be able to tell which one they got.
+                // the keyguard is an Activity capability (setShowWhenLocked), and
+                // CallOverlayActivity does exactly that — but routing to it here is DISABLED,
+                // and must stay disabled until it grows its own answer control.
+                //
+                // Measured on device: an Activity over the incoming-call screen pauses the
+                // dialer, and a paused call screen stops accepting the answer gesture.
+                // FLAG_NOT_TOUCH_MODAL passes the touches through, but the dialer no longer
+                // acts on them. The card was visible and the call could not be answered.
+                // That is strictly worse than no card, so the locked case degrades to the
+                // notification, which the lock screen shows without owning the foreground.
+                //
+                // See CallOverlayActivity's kdoc for what it would take to re-enable.
                 CallOverlayActivity.isDeviceLocked(context) ->
-                    CallOverlayActivity.show(context, PhoneNormalizer.key(number)!!)
+                    BriefingNotifier.show(context, action.briefing)
 
                 else -> CallOverlayService.show(context, PhoneNormalizer.key(number)!!)
             }
