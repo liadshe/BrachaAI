@@ -13,7 +13,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -21,9 +24,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
@@ -218,30 +226,93 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun BoxScope.OverlayPermissionPrompt(onEnable: () -> Unit, onDismiss: () -> Unit) {
-        Card(
+        Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = BOTTOM_NAV_CLEARANCE + 16.dp)
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = BOTTOM_NAV_CLEARANCE + 16.dp),
+            // Matches the web app's own dialog: white, heavily rounded, hairline border, and
+            // a soft lift rather than a Material tonal fill. A default Material3 Card here
+            // reads as a system dialog dropped on top of the product.
+            shape = RoundedCornerShape(28.dp),
+            color = colorResource(R.color.prompt_surface),
+            border = BorderStroke(1.dp, colorResource(R.color.prompt_border)),
+            shadowElevation = 16.dp,
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(
+                            colorResource(R.color.prompt_accent_tint),
+                            RoundedCornerShape(14.dp),
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_overlay_window),
+                        // The heading already names the feature; the mark is decoration.
+                        contentDescription = null,
+                        tint = colorResource(R.color.prompt_accent),
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
                 Text(
                     stringResource(R.string.overlay_permission_title),
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colorResource(R.color.prompt_title),
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     stringResource(R.string.overlay_permission_body),
-                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp,
+                    color = colorResource(R.color.prompt_body),
                     textAlign = TextAlign.Start,
                 )
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(R.string.overlay_permission_dismiss))
+
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    // Equal weights, declining first: this prompt is an offer, not a demand,
+                    // so "Not now" is a peer of the primary action rather than a hidden
+                    // text link — the user is meant to be able to refuse it comfortably.
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = null,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colorResource(R.color.prompt_secondary_fill),
+                            contentColor = colorResource(R.color.prompt_body),
+                        ),
+                    ) {
+                        Text(
+                            stringResource(R.string.overlay_permission_dismiss),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
-                    Button(onClick = onEnable) {
-                        Text(stringResource(R.string.overlay_permission_enable))
+                    Button(
+                        onClick = onEnable,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = null,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colorResource(R.color.prompt_accent),
+                            contentColor = Color.White,
+                        ),
+                    ) {
+                        Text(
+                            stringResource(R.string.overlay_permission_enable),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
                 }
             }

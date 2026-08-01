@@ -105,6 +105,12 @@
       ✕ sits exactly where it did before. Worth the care because every other pixel of this
       card opens the app over a ringing call, so a near miss on the close button is not a
       no-op — it launches MainActivity mid-ring.
+
+      elevation MUST stay above the card's 8dp. Since API 21 a ViewGroup draws and hit-tests
+      its children ordered by Z (elevation + translationZ), NOT by declaration order — so at
+      the default 0dp this button was painted underneath the opaque card and was completely
+      invisible, and taps in its corner fell through to the card and launched the app instead
+      of dismissing. Declaring it last is not enough.
     -->
     <TextView
         android:id="@+id/overlay_close"
@@ -113,9 +119,10 @@
         android:layout_gravity="top|end"
         android:layout_marginTop="12dp"
         android:layout_marginEnd="12dp"
+        android:elevation="12dp"
         android:gravity="center"
         android:text="✕"
         android:textColor="@color/overlay_secondary_text"
-        android:textSize="16sp"
+        android:textSize="18sp"
         android:contentDescription="@string/overlay_close" />
 </FrameLayout>
