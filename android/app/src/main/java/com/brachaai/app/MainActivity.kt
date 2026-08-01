@@ -80,10 +80,17 @@ class MainActivity : ComponentActivity() {
      *   broadcast with READ_PHONE_STATE as a required receiver permission, so without the
      *   runtime grant PhoneStateReceiver.onReceive is simply never invoked and the overlay
      *   never appears. A denial means no briefing card; everything else works unchanged.
+     * - ANSWER_PHONE_CALLS: lets the locked-screen card answer and decline the call itself.
+     *   That card takes the foreground, which pauses the dialer and stops it acting on its
+     *   own answer gesture, so without this grant the card would leave the user unable to
+     *   take the call. A denial is handled by not showing that card at all — the locked case
+     *   degrades to a notification, which never owns the foreground. See
+     *   CallOverlayActivity.canHandleCalls.
      */
     private val optionalPermissions: Array<String> = arrayOf(
         Manifest.permission.READ_CALL_LOG,
         Manifest.permission.READ_PHONE_STATE,
+        Manifest.permission.ANSWER_PHONE_CALLS,
     )
 
     private val permissionLauncher = registerForActivityResult(

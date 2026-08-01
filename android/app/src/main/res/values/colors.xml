@@ -14,6 +14,8 @@
     <color name="overlay_accent">#FF2F6BFF</color>
     <color name="overlay_task_bullet">#FFFF7A45</color>
     <color name="overlay_divider">#FF2A3346</color>
+    <color name="overlay_answer">#FF16A34A</color>
+    <color name="overlay_decline">#FFDC2626</color>
 
     <!--
       The in-app permission prompt is native Compose sitting on top of the web UI, so it

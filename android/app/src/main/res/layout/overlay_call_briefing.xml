@@ -97,6 +97,51 @@
                 android:textSize="13sp"
                 android:visibility="gone" />
         </LinearLayout>
+
+        <!--
+          Call controls, shown ONLY by CallOverlayActivity on a locked screen. An Activity
+          over the ring pauses the dialer, which then ignores its own answer gesture — so the
+          card that takes the foreground has to offer the way back out. Hidden by default:
+          the unlocked WindowManager card never takes the foreground, so the real dialer is
+          right there and a second set of call controls would be confusing and redundant.
+        -->
+        <LinearLayout
+            android:id="@+id/overlay_actions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:orientation="horizontal"
+            android:baselineAligned="false"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/overlay_decline"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:background="@drawable/overlay_decline_background"
+                android:gravity="center"
+                android:text="@string/overlay_decline"
+                android:textColor="@color/overlay_primary_text"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <Space
+                android:layout_width="12dp"
+                android:layout_height="1dp" />
+
+            <TextView
+                android:id="@+id/overlay_answer"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:background="@drawable/overlay_answer_background"
+                android:gravity="center"
+                android:text="@string/overlay_answer"
+                android:textColor="@color/overlay_primary_text"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+        </LinearLayout>
     </LinearLayout>
 
     <!--

@@ -14,6 +14,12 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!--
+      Lets the locked-screen briefing card answer and decline calls itself. That card takes
+      the foreground, which pauses the dialer and stops it acting on its own answer gesture,
+      so without this the phone could not be answered while the card was up.
+    -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application

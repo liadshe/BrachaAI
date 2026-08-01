@@ -19,8 +19,20 @@ import android.widget.TextView
  * Sets `root.tag` to the contact id: [CallOverlayService] reads it back to discard a live
  * refresh that arrives after the card has moved on to a different caller.
  */
-fun bindBriefingCard(context: Context, root: View, briefing: Briefing) {
+fun bindBriefingCard(
+    context: Context,
+    root: View,
+    briefing: Briefing,
+    showCallActions: Boolean = false,
+) {
     root.tag = briefing.contactId
+
+    // Only the locked card carries Answer/Decline. It takes the foreground, which pauses the
+    // dialer and stops it acting on its own answer gesture, so it has to offer the way out
+    // itself. The unlocked card never takes the foreground, so the real dialer is still live
+    // underneath and a duplicate set of controls would be redundant.
+    root.findViewById<View>(R.id.overlay_actions).visibility =
+        if (showCallActions) View.VISIBLE else View.GONE
     root.findViewById<TextView>(R.id.overlay_name).text = briefing.name
 
     val summary = briefing.lastCallSummary?.takeIf { it.isNotBlank() }

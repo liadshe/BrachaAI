@@ -59,18 +59,22 @@ class PhoneStateReceiver : BroadcastReceiver() {
 
                 // A TYPE_APPLICATION_OVERLAY window is layered BELOW the keyguard, so on a
                 // locked phone CallOverlayService draws a card nobody can see. Showing above
-                // the keyguard is an Activity capability (setShowWhenLocked), and
-                // CallOverlayActivity does exactly that — but routing to it here is DISABLED,
-                // and must stay disabled until it grows its own answer control.
+                // the keyguard is an Activity capability (setShowWhenLocked), so the locked
+                // case takes CallOverlayActivity.
                 //
-                // Measured on device: an Activity over the incoming-call screen pauses the
-                // dialer, and a paused call screen stops accepting the answer gesture.
-                // FLAG_NOT_TOUCH_MODAL passes the touches through, but the dialer no longer
-                // acts on them. The card was visible and the call could not be answered.
-                // That is strictly worse than no card, so the locked case degrades to the
-                // notification, which the lock screen shows without owning the foreground.
-                //
-                // See CallOverlayActivity's kdoc for what it would take to re-enable.
+                // canHandleCalls is a safety gate, not a feature check. That Activity takes
+                // the foreground, which pauses the dialer, and a paused call screen ignores
+                // its own answer gesture — so the card must be able to answer the call
+                // itself. Without ANSWER_PHONE_CALLS it cannot, and showing it anyway would
+                // leave the user unable to take the call. Measured on device; do not relax
+                // this condition.
+                CallOverlayActivity.isDeviceLocked(context) &&
+                    CallOverlayActivity.canHandleCalls(context) ->
+                    CallOverlayActivity.show(context, PhoneNormalizer.key(number)!!)
+
+                // Locked, but we could not answer the call for them. The notification shows
+                // on the lock screen without ever owning the foreground, so the dialer stays
+                // fully usable.
                 CallOverlayActivity.isDeviceLocked(context) ->
                     BriefingNotifier.show(context, action.briefing)
 

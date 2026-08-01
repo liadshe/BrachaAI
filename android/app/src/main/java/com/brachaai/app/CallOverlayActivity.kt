@@ -1,36 +1,39 @@
 package com.brachaai.app
 
+import android.Manifest
 import android.app.Activity
 import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.telecom.TelecomManager
 import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.widget.Toast
+import androidx.core.content.ContextCompat
 
 /**
- * The briefing card, shown over a *locked* screen.
+ * The briefing card, shown over a *locked* screen, with its own call controls.
  *
- * **NOT CURRENTLY ROUTED TO — see [PhoneStateReceiver].** It works: it appears above the
- * keyguard and, after one re-assert, stays above the dialer's call screen. The blocker is
- * that an Activity on top *pauses* the dialer, and a paused call screen stops acting on the
- * answer gesture. `FLAG_NOT_TOUCH_MODAL` delivers those touches to it, but it ignores them.
- * Verified on device: card visible, call unanswerable. A card that stops you answering your
- * phone is worse than no card, so the locked case falls back to a notification.
+ * An Activity shown over a ring *pauses* the dialer, and a paused call screen stops acting on
+ * its own answer gesture — measured on device: card visible, call unanswerable.
+ * `FLAG_NOT_TOUCH_MODAL` delivers the touches; the dialer simply ignores them. So a card that
+ * takes the foreground during a ring has to offer the way back out itself, which is how
+ * caller-ID apps get away with the same trick: [answer] and [decline] drive `TelecomManager`
+ * directly under `ANSWER_PHONE_CALLS`.
  *
- * To re-enable, this has to stop depending on the dialer being interactive and answer the
- * call itself: `ANSWER_PHONE_CALLS` (a dangerous, runtime-granted permission) plus
- * `TelecomManager.acceptRingingCall()` / `endCall()`, and its own Answer and Decline
- * controls on the card. That is how caller-ID apps get away with owning the foreground
- * during a ring. It is a real feature, not a tweak — it changes this from something that
- * shows information into something that handles your calls.
+ * That makes the permission load-bearing for safety, not just for a feature.
+ * [PhoneStateReceiver] must never route here without it — see [canHandleCalls] — and
+ * [onCreate] re-checks and bails out to the notification rather than trusting the caller.
+ * Getting this wrong does not degrade the feature; it costs the user the call.
  *
  * [CallOverlayService] draws the same card as a `TYPE_APPLICATION_OVERLAY` window, which the
  * platform layers *below* the keyguard — no flag changes that, so on a locked phone that card
@@ -80,6 +83,17 @@ class CallOverlayActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Defence in depth. PhoneStateReceiver already gates on canHandleCalls, but showing
+        // this card without the ability to answer is not a degraded feature — it is a phone
+        // that cannot take the call. Re-check rather than trust the caller, and hand off to
+        // the renderer that never touches the foreground.
+        if (!canHandleCalls(this)) {
+            Log.e(TAG, "Started without ANSWER_PHONE_CALLS; falling back to a notification")
+            fallBackToNotification()
+            return
+        }
+
         showAboveKeyguard()
 
         root = layoutInflater.inflate(R.layout.overlay_call_briefing, null).also { view ->
@@ -88,6 +102,14 @@ class CallOverlayActivity : Activity() {
             view.findViewById<View>(R.id.overlay_card).setOnClickListener {
                 openContact(view.tag as? String)
             }
+            view.findViewById<View>(R.id.overlay_answer).setOnClickListener { answer() }
+            view.findViewById<View>(R.id.overlay_decline).setOnClickListener { decline() }
+
+            // endCall() is API 28+. Below that there is no public way for a third party to
+            // reject a ringing call, and a Decline button that silently does nothing is worse
+            // than no button — the user would think the call was rejected.
+            view.findViewById<View>(R.id.overlay_decline).visibility =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) View.VISIBLE else View.GONE
         }
 
         sizeWindowToCard()
@@ -95,6 +117,69 @@ class CallOverlayActivity : Activity() {
 
         if (!render(intent)) return
         mainHandler.postDelayed(timeout, MAX_BRIEFING_LIFETIME_MS)
+    }
+
+    /**
+     * Accepts the ringing call, then gets out of the way.
+     *
+     * Once answered the user needs the in-call screen — to mute, to use the speaker, to hang
+     * up — and this Activity would pause it exactly as it paused the ringing screen. So it
+     * finishes and hands the card to [CallOverlayService], whose `WindowManager` window sits
+     * above the in-call UI without taking the foreground from it. The card survives into the
+     * conversation, which is the point, but it stops owning the screen the moment owning it
+     * would cost the user something.
+     */
+    private fun answer() {
+        val accepted = try {
+            getSystemService(TelecomManager::class.java)?.acceptRingingCall()
+            true
+        } catch (e: SecurityException) {
+            Log.e(TAG, "ANSWER_PHONE_CALLS was revoked between the check and the tap", e)
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "Telecom refused to accept the ringing call", e)
+            false
+        }
+
+        if (!accepted) {
+            // Leave the card up. Finishing would drop the user onto a call screen they may
+            // now have to fight to answer; keeping it at least leaves the toast visible.
+            Toast.makeText(this, R.string.overlay_answer_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        handOffToOverlay()
+        finish()
+    }
+
+    private fun decline() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                getSystemService(TelecomManager::class.java)?.endCall()
+            }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "ANSWER_PHONE_CALLS was revoked between the check and the tap", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Telecom refused to end the call", e)
+        }
+        finish()
+    }
+
+    /** Continues the card as a non-foreground overlay, if that permission is held. */
+    private fun handOffToOverlay() {
+        val key = phoneKey ?: return
+        if (CallOverlayService.canDrawOverlays(this)) {
+            CallOverlayService.show(this, key)
+        }
+    }
+
+    private fun fallBackToNotification() {
+        val key = intent?.getStringExtra(EXTRA_PHONE_KEY)
+        val briefing = key?.let { BriefingStore.default(filesDir).lookup(it) }
+        if (briefing != null && briefing.hasContent) {
+            BriefingNotifier.show(this, briefing)
+        }
+        finish()
     }
 
     /** A second call arriving while this card is up replaces its content rather than stacking. */
@@ -185,7 +270,7 @@ class CallOverlayActivity : Activity() {
             return false
         }
 
-        root?.let { bindBriefingCard(this, it, briefing) }
+        root?.let { bindBriefingCard(this, it, briefing, showCallActions = true) }
         return true
     }
 
@@ -233,6 +318,17 @@ class CallOverlayActivity : Activity() {
          */
         fun isDeviceLocked(context: Context): Boolean =
             context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
+
+        /**
+         * Whether this card may be shown at all.
+         *
+         * Not a feature flag — a safety gate. Without `ANSWER_PHONE_CALLS` the card takes the
+         * foreground, pauses the dialer, and offers no way to accept the call, so the user
+         * simply cannot answer their phone. Callers must check this before [show].
+         */
+        fun canHandleCalls(context: Context): Boolean =
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ANSWER_PHONE_CALLS) ==
+                PackageManager.PERMISSION_GRANTED
 
         fun show(context: Context, phoneKey: String) {
             val intent = Intent(context, CallOverlayActivity::class.java).apply {
