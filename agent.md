@@ -124,7 +124,7 @@ Node.js/Express backend using TypeScript that processes transcriptions, manages 
 ### Database Models
 
 - **User**: `name`, `email`, `phone`, `avatar`, `permissions`
-- **Contact**: `userId`, `name`, `phone`, `isVip`
+- **Contact**: `userId`, `name`, `phone`
 - **Call**: `userId`, `contactId`, `fullTranscript`, `callSummary`, `callDateTime`, `callLength`
 - **Task**: `userId`, `contactId`, `title`, `description`, `priority` (LOW|MEDIUM|HIGH), `status` (todo|in-progress|done)
 
@@ -274,10 +274,6 @@ DELETE /api/calls/{callid}
 GET /api/settings
 PUT /api/settings
 PUT /api/settings/permissions
-POST /api/integrations/google-calendar/connect
-POST /api/integrations/google-calendar/sync
-DELETE /api/integrations/google-calendar/disconnect
-
 
 // Tasks
 GET /api/tasks

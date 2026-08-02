@@ -43,7 +43,6 @@ export const signup = async (req: Request, res: Response) => {
             password: hashedPassword,
             businessDescription: businessDescription ?? '',
             settings: {
-                googleCalendarSync: false,
                 autoCallRecording: false
             },
             permissions: {

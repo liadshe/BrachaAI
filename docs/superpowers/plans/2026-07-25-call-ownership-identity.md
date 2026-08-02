@@ -1282,7 +1282,6 @@ export const getOrCreateContact = async (
         userId,
         name: contactName,
         phone: phone ?? PLACEHOLDER_PHONE, // schema requires a phone
-        isVip: false,
     });
     console.log(`Created new contact: ${contactName}`);
     return created;

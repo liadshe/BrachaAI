@@ -34,7 +34,7 @@ const baseUserDoc = {
     email: 'ada@example.com',
     phoneNumber: '+15550000000',
     password: 'hashed-password',
-    settings: { googleCalendarSync: false, autoCallRecording: false },
+    settings: { autoCallRecording: false },
     permissions: { microphone: false, contacts: false },
     profilePicture: undefined,
 };
