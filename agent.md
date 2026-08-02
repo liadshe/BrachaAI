@@ -274,10 +274,6 @@ DELETE /api/calls/{callid}
 GET /api/settings
 PUT /api/settings
 PUT /api/settings/permissions
-POST /api/integrations/google-calendar/connect
-POST /api/integrations/google-calendar/sync
-DELETE /api/integrations/google-calendar/disconnect
-
 
 // Tasks
 GET /api/tasks

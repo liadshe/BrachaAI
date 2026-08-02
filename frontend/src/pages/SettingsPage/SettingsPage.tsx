@@ -9,7 +9,6 @@ import styles from './SettingsPage.module.css';
 const SettingsPage: React.FC = () => {
     const navigate = useNavigate();
     const [user, setUser] = useState<any>(getStoredUser());
-    const [googleCalendarSync, setGoogleCalendarSync] = useState(user.settings?.googleCalendarSync || false);
     const [autoCallRecording, setAutoCallRecording] = useState(user.settings?.autoCallRecording || false);
     const [deleteAudioAfterProcessing, setDeleteAudioAfterProcessing] = useState(true);
     const [audioSettingSupported, setAudioSettingSupported] = useState(false);
@@ -17,7 +16,6 @@ const SettingsPage: React.FC = () => {
     useEffect(() => {
         const storedUser = getStoredUser();
         setUser(storedUser);
-        setGoogleCalendarSync(storedUser.settings?.googleCalendarSync || false);
         setAutoCallRecording(storedUser.settings?.autoCallRecording || false);
 
         // Native-only setting: the Android host owns it so the background call-processing
@@ -31,7 +29,6 @@ const SettingsPage: React.FC = () => {
     }, []);
 
     const handleToggle = async (setting: string, value: boolean) => {
-        if (setting === 'googleCalendarSync') setGoogleCalendarSync(value);
         if (setting === 'autoCallRecording') setAutoCallRecording(value);
 
         try {
@@ -109,38 +106,6 @@ const SettingsPage: React.FC = () => {
                         </div>
                     </div>
                     <button className={styles.editBtn} onClick={() => navigate('/edit-profile')}>Edit</button>
-                </section>
-
-
-                {/* Integrations Section */}
-                <section className={styles.settingsSection}>
-                    <h3 className={styles.sectionTitle}>Integrations</h3>
-                    <div className={styles.settingsCard}>
-                        <div className={styles.settingItem}>
-                            <div className={styles.settingInfo}>
-                                <div className={`${styles.iconBox} ${styles.blueIcon}`}>
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
-                                        <line x1="16" x2="16" y1="2" y2="6" />
-                                        <line x1="8" x2="8" y1="2" y2="6" />
-                                        <line x1="3" x2="21" y1="10" y2="10" />
-                                    </svg>
-                                </div>
-                                <div className={styles.settingText}>
-                                    <span className={styles.settingName}>Google Calendar Sync</span>
-                                    <span className={styles.settingDescription}>Sync tasks with calendar</span>
-                                </div>
-                            </div>
-                            <label className={styles.switch}>
-                                <input
-                                    type="checkbox"
-                                    checked={googleCalendarSync}
-                                    onChange={(e) => handleToggle('googleCalendarSync', e.target.checked)}
-                                />
-                                <span className={styles.slider}></span>
-                            </label>
-                        </div>
-                    </div>
                 </section>
 
                 {/* Call Settings Section */}

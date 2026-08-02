@@ -8,7 +8,6 @@ export interface IUser extends Document {
     profilePicture?: string;
     businessDescription?: string;
     settings: {
-        googleCalendarSync: boolean;
         autoCallRecording: boolean;
     };
     permissions: {
@@ -25,8 +24,7 @@ const UserSchema = new Schema({
     profilePicture: { type: String },
     businessDescription: { type: String, default: '' },
     settings: {
-        googleCalendarSync: { type: Boolean, default: false },
-        autoCallRecording: { type: Boolean, default: false },
+        autoCallRecording: { type: Boolean, default: false }
     },
     permissions: {
         microphone: { type: Boolean, default: false },
