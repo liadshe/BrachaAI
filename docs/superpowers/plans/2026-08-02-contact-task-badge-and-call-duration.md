@@ -437,6 +437,12 @@ import ContactsPage from './ContactsPage';
 
 const clientMock = new MockAdapter(apiClient);
 
+/**
+ * Anchored on purpose. The page renders BottomNav, which has a "Tasks" nav label, so an
+ * unanchored /task/i would match the nav and the no-badge assertions could never pass.
+ */
+const BADGE_TEXT = /^\d+ tasks?$/;
+
 const renderPage = () =>
     render(
         <MemoryRouter>
@@ -479,7 +485,7 @@ describe('ContactsPage task badge', () => {
         renderPage();
 
         await screen.findByText('David Cohen');
-        expect(screen.queryByText(/task/i)).toBeNull();
+        expect(screen.queryByText(BADGE_TEXT)).toBeNull();
     });
 
     it('shows no badge when the backend omits the count entirely', async () => {
@@ -490,7 +496,7 @@ describe('ContactsPage task badge', () => {
         renderPage();
 
         await screen.findByText('David Cohen');
-        expect(screen.queryByText(/task/i)).toBeNull();
+        expect(screen.queryByText(BADGE_TEXT)).toBeNull();
     });
 });
 ```
