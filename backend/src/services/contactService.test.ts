@@ -1,19 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../models/Contact', () => ({
-    default: { findOne: vi.fn(), deleteOne: vi.fn() },
+    default: { find: vi.fn(), findOne: vi.fn(), deleteOne: vi.fn() },
 }));
 vi.mock('../models/Call', () => ({
     default: { deleteMany: vi.fn() },
 }));
 vi.mock('../models/Task', () => ({
-    default: { deleteMany: vi.fn() },
+    default: { find: vi.fn(), deleteMany: vi.fn() },
 }));
 
 import Contact from '../models/Contact';
 import Call from '../models/Call';
 import Task from '../models/Task';
-import { deleteContactCascade } from './contactService';
+import { deleteContactCascade, getContactsWithOpenTaskCounts } from './contactService';
 
 const USER_ID = '507f1f77bcf86cd799439011';
 const CONTACT_ID = '507f191e810c19729de860ea';
@@ -80,5 +80,100 @@ describe('deleteContactCascade', () => {
         const result = await deleteContactCascade(USER_ID, CONTACT_ID);
 
         expect(result).toEqual({ deletedCalls: 12, deletedTasks: 4 });
+    });
+});
+
+/** Mongoose query builders are chainable; resolve at .lean(). */
+const chain = (result: any) => ({
+    sort: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
+    lean: vi.fn().mockResolvedValue(result),
+});
+
+const OTHER_CONTACT_ID = '507f191e810c19729de860eb';
+
+describe('getContactsWithOpenTaskCounts', () => {
+    beforeEach(() => {
+        vi.mocked(Contact.find).mockReset();
+        vi.mocked(Task.find).mockReset();
+
+        vi.mocked(Contact.find).mockReturnValue(chain([
+            { _id: CONTACT_ID, name: 'David Cohen', phone: '+972541234567' },
+            { _id: OTHER_CONTACT_ID, name: 'Noa Levi', phone: '+972541234568' },
+        ]) as any);
+        vi.mocked(Task.find).mockReturnValue(chain([]) as any);
+    });
+
+    it('returns an empty array without querying tasks when the user has no contacts', async () => {
+        vi.mocked(Contact.find).mockReturnValue(chain([]) as any);
+
+        const result = await getContactsWithOpenTaskCounts(USER_ID);
+
+        expect(result).toEqual([]);
+        expect(Task.find).not.toHaveBeenCalled();
+    });
+
+    it('scopes both queries to the user', async () => {
+        await getContactsWithOpenTaskCounts(USER_ID);
+
+        expect(Contact.find).toHaveBeenCalledWith({ userId: USER_ID });
+        expect(vi.mocked(Task.find).mock.calls[0][0]).toMatchObject({ userId: USER_ID });
+    });
+
+    it('counts a task as open only when completed is false and status is not done', async () => {
+        await getContactsWithOpenTaskCounts(USER_ID);
+
+        expect(vi.mocked(Task.find).mock.calls[0][0]).toMatchObject({
+            completed: false,
+            status: { $ne: 'done' },
+        });
+    });
+
+    it('counts each contact open tasks', async () => {
+        vi.mocked(Task.find).mockReturnValue(chain([
+            { contactId: CONTACT_ID },
+            { contactId: CONTACT_ID },
+            { contactId: OTHER_CONTACT_ID },
+        ]) as any);
+
+        const result = await getContactsWithOpenTaskCounts(USER_ID);
+
+        expect(result[0]).toMatchObject({ name: 'David Cohen', openTaskCount: 2 });
+        expect(result[1]).toMatchObject({ name: 'Noa Levi', openTaskCount: 1 });
+    });
+
+    it('reports zero rather than omitting a contact with no open tasks', async () => {
+        vi.mocked(Task.find).mockReturnValue(chain([{ contactId: CONTACT_ID }]) as any);
+
+        const result = await getContactsWithOpenTaskCounts(USER_ID);
+
+        expect(result).toHaveLength(2);
+        expect(result[1]).toMatchObject({ name: 'Noa Levi', openTaskCount: 0 });
+    });
+
+    it('matches contacts to tasks by id even when the ids arrive as ObjectId-like objects', async () => {
+        // .lean() returns real ObjectIds, not strings; a === comparison would silently
+        // count zero for every contact.
+        const asObjectId = (hex: string) => ({ toString: () => hex });
+        vi.mocked(Contact.find).mockReturnValue(chain([
+            { _id: asObjectId(CONTACT_ID), name: 'David Cohen' },
+        ]) as any);
+        vi.mocked(Task.find).mockReturnValue(chain([
+            { contactId: asObjectId(CONTACT_ID) },
+        ]) as any);
+
+        const result = await getContactsWithOpenTaskCounts(USER_ID);
+
+        expect(result[0]).toMatchObject({ openTaskCount: 1 });
+    });
+
+    it('preserves the contact fields alongside the count', async () => {
+        const result = await getContactsWithOpenTaskCounts(USER_ID);
+
+        expect(result[0]).toMatchObject({
+            _id: CONTACT_ID,
+            name: 'David Cohen',
+            phone: '+972541234567',
+        });
     });
 });

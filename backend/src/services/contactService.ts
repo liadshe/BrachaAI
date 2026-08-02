@@ -1,6 +1,7 @@
 import Contact from '../models/Contact';
 import Call from '../models/Call';
 import Task from '../models/Task';
+import { OPEN_TASK_FILTER } from './taskFilters';
 
 export interface CascadeResult {
     deletedCalls: number;
@@ -35,4 +36,38 @@ export const deleteContactCascade = async (
         deletedCalls: callResult.deletedCount ?? 0,
         deletedTasks: taskResult.deletedCount ?? 0,
     };
+};
+
+/**
+ * Every contact the user owns, each carrying how many open tasks point at it.
+ *
+ * Two queries for the whole list rather than two per contact: the Contacts page loads the
+ * entire address book at once, so an N+1 here would scale with it. Same shape as
+ * `briefingService.fetchRelated`, and deliberately not a `$group` aggregation — the
+ * aggregation pipeline skips Mongoose's string-to-ObjectId coercion, and a miscast
+ * `userId` there matches nothing silently, which would look like every badge missing
+ * rather than like an error.
+ */
+export const getContactsWithOpenTaskCounts = async (userId: string): Promise<any[]> => {
+    const contacts = (await Contact.find({ userId }).sort({ name: 1 }).lean()) as any[];
+    if (contacts.length === 0) {
+        return [];
+    }
+
+    const openTasks = (await Task.find({ userId, ...OPEN_TASK_FILTER })
+        .select('contactId')
+        .lean()) as any[];
+
+    // Keyed on String(...) throughout: .lean() hands back ObjectIds, and two ObjectIds for
+    // the same document are not === each other.
+    const counts = new Map<string, number>();
+    for (const task of openTasks) {
+        const key = String(task.contactId);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    return contacts.map(contact => ({
+        ...contact,
+        openTaskCount: counts.get(String(contact._id)) ?? 0,
+    }));
 };
