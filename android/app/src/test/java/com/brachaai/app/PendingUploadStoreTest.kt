@@ -2,6 +2,7 @@ package com.brachaai.app
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -183,5 +184,43 @@ class PendingUploadStoreTest {
 
         assertFalse(oldest.exists())
         assertEquals(PendingUploadStore.MAX_ENTRIES, store.size())
+    }
+
+    // ------------------------------------------------------------- call length
+
+    @Test
+    fun roundTripsAnUploadCarryingItsCallLength() {
+        val store = PendingUploadStore(tempFolder.newFolder("queue-with-length"))
+        store.enqueue(sample().copy(callLengthSeconds = 272))
+
+        assertEquals(272, store.peekAll().single().second.callLengthSeconds)
+    }
+
+    @Test
+    fun roundTripsAnUploadWithNoCallLength() {
+        val store = PendingUploadStore(tempFolder.newFolder("queue-no-length"))
+        store.enqueue(sample().copy(callLengthSeconds = null))
+
+        assertNull(store.peekAll().single().second.callLengthSeconds)
+    }
+
+    @Test
+    fun readsAPreUpdateEntryThatHasNoCallLengthKeyInsteadOfQuarantiningIt() {
+        // Entries queued by the shipped build have no such key. Treating that as a parse
+        // failure would rename every one of them to *.corrupt on the first flush after
+        // the update — and their recordings are already deleted, so those transcripts
+        // would be stranded.
+        val dir = tempFolder.newFolder("queue-legacy")
+        val store = PendingUploadStore(dir)
+        File(dir, "1754000000000-000.json").writeText(
+            """{"contactName":"Dana","date":"250101_120000","callerNumber":"0501234567","transcript":"shalom"}"""
+        )
+
+        val entries = store.peekAll()
+
+        assertEquals(1, entries.size)
+        assertEquals("shalom", entries.single().second.transcript)
+        assertNull(entries.single().second.callLengthSeconds)
+        assertTrue("the legacy entry must not have been quarantined", quarantined(dir).isEmpty())
     }
 }

@@ -7,6 +7,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { useMultiSelect } from '@/hooks/useMultiSelect';
 import { useSelectionBackButton } from '@/hooks/useSelectionBackButton';
 import { useCallDeletion } from '@/hooks/useCallDeletion';
+import { formatDuration } from '@/utils/formatDuration';
 import styles from './ContactDetailsPage.module.css';
 
 interface Contact {
@@ -221,12 +222,6 @@ const ContactDetailsPage: React.FC = () => {
         return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     };
 
-    const formatDuration = (seconds?: number) => {
-        if (!seconds) return '0 min';
-        const mins = Math.round(seconds / 60);
-        return `${mins} min`;
-    };
-
     const formatTime = (dateStr?: string) => {
         if (!dateStr) return '';
         return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -386,7 +381,7 @@ const ContactDetailsPage: React.FC = () => {
                                                 </div>
                                                 <div className={styles.callMeta}>
                                                     <h3 className={styles.callTitle}>Incoming Call</h3>
-                                                    <p className={styles.callTime}>{formatTime(call.callDateTime)} • {formatDuration(call.callLength)}</p>
+                                                    <p className={styles.callTime}>{formatTime(call.callDateTime)}{formatDuration(call.callLength) ? ` • ${formatDuration(call.callLength)}` : ''}</p>
                                                 </div>
                                             </div>
                                             <span className={styles.callDate}>{getRelativeDay(call.callDateTime)}</span>

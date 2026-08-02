@@ -2,16 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../models/Call', () => ({
     default: {
+        create: vi.fn(),
         deleteMany: vi.fn(),
     },
 }));
 
 import Call from '../models/Call';
-import { deleteCallsByIds } from './callService';
+import { deleteCallsByIds, saveRawCall } from './callService';
 
 const USER_ID = '507f1f77bcf86cd799439011';
 const CALL_A = '507f191e810c19729de860ea';
 const CALL_B = '507f191e810c19729de860eb';
+const CONTACT_ID = '507f191e810c19729de860ec';
 
 describe('deleteCallsByIds', () => {
     beforeEach(() => {
@@ -45,5 +47,26 @@ describe('deleteCallsByIds', () => {
         const deleted = await deleteCallsByIds(USER_ID, [CALL_A]);
 
         expect(deleted).toBe(0);
+    });
+});
+
+describe('saveRawCall call length', () => {
+    beforeEach(() => {
+        vi.mocked(Call.create).mockReset();
+        vi.mocked(Call.create).mockResolvedValue({ id: 'call-1' } as any);
+    });
+
+    it('stores the duration when one is given', async () => {
+        await saveRawCall(USER_ID, CONTACT_ID, 'shalom', new Date('2026-08-02T10:15:00Z'), 272);
+
+        expect(vi.mocked(Call.create).mock.calls[0][0]).toMatchObject({ callLength: 272 });
+    });
+
+    it('omits the field entirely when the duration is unknown', async () => {
+        await saveRawCall(USER_ID, CONTACT_ID, 'shalom', new Date('2026-08-02T10:15:00Z'));
+
+        // Absent, not null: an explicit null would be a stored claim that we measured
+        // nothing, and it would defeat the `callLength?: number` optionality downstream.
+        expect(vi.mocked(Call.create).mock.calls[0][0]).not.toHaveProperty('callLength');
     });
 });

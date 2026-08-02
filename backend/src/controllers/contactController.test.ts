@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../services/contactService', () => ({
     deleteContactCascade: vi.fn(),
+    getContactsWithOpenTaskCounts: vi.fn(),
 }));
 vi.mock('../models/Contact', () => ({
     default: { find: vi.fn(), findOne: vi.fn() },
 }));
 
 import * as contactService from '../services/contactService';
-import { deleteContact } from './contactController';
+import { deleteContact, getContacts } from './contactController';
 
 const USER_ID = '507f1f77bcf86cd799439011';
 const CONTACT_ID = '507f191e810c19729de860ea';
@@ -77,6 +78,36 @@ describe('deleteContact', () => {
         const res = makeRes();
 
         await deleteContact(makeReq(CONTACT_ID), res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+    });
+});
+
+describe('getContacts', () => {
+    beforeEach(() => {
+        vi.mocked(contactService.getContactsWithOpenTaskCounts).mockReset();
+        vi.mocked(contactService.getContactsWithOpenTaskCounts).mockResolvedValue([
+            { _id: CONTACT_ID, name: 'David Cohen', openTaskCount: 2 },
+        ]);
+    });
+
+    it('returns the contacts with their open-task counts', async () => {
+        const res = makeRes();
+
+        await getContacts({ user: { id: USER_ID } } as any, res);
+
+        expect(contactService.getContactsWithOpenTaskCounts).toHaveBeenCalledWith(USER_ID);
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith([
+            { _id: CONTACT_ID, name: 'David Cohen', openTaskCount: 2 },
+        ]);
+    });
+
+    it('returns 500 when the service throws', async () => {
+        vi.mocked(contactService.getContactsWithOpenTaskCounts).mockRejectedValue(new Error('db down'));
+        const res = makeRes();
+
+        await getContacts({ user: { id: USER_ID } } as any, res);
 
         expect(res.status).toHaveBeenCalledWith(500);
     });

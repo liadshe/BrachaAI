@@ -47,7 +47,8 @@ Single-module Android app (`app`). `MainActivity` hosts a WebView (`WebViewScree
    - Parses the filename
    - Converts audio to standard MP3 (128k, 44100Hz, stereo) using FFmpeg
    - Sends the MP3 to OpenAI Whisper for Hebrew transcription, then to GPT-4o for spelling/grammar correction
-   - Looks up the caller's number via `CallerLookup` (matches the call log against the recording's start time; returns `null` if `READ_CALL_LOG` wasn't granted or nothing matches)
+   - Looks up the caller's number via `CallerLookup` (matches the call log against the recording's start time; returns `CallLogMatch.NONE` if `READ_CALL_LOG` wasn't granted or nothing matches)
+   - Resolves the call's length: `CallerLookup` now returns the call log's `DURATION` alongside the number, and `AudioDuration` measures the recording itself when the call log has nothing (no `READ_CALL_LOG`, no matching entry, or a missed call logged as 0). Either may be unknown, which is sent as a JSON null and never fails the upload
    - POSTs the result, authenticated with the stored JWT, to the backend at `http://193.106.55.154:3000/api/calls`
    - On failure (no token, network error, or a retryable HTTP status) the payload is durably queued via `PendingUploadStore` instead of being lost; non-retryable statuses (400/422 — e.g. an empty transcript) are logged and dropped instead of retried forever
 

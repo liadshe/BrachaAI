@@ -204,7 +204,7 @@ Represents a single recorded and processed phone call.
 *   **`fullTranscript`**: `String` (Required) - The full text transcript from the Whisper API.
 *   **`callSummary`**: `String` - The AI-generated summary from the GPT-4o API.
 *   **`callDateTime`**: `Date` (Required) - The date and time the call occurred.
-*   **`callLength`**: `Number` - The duration of the call in seconds.
+*   **`callLength`**: `Number` - The duration of the call in seconds. Sent by the Android app, which prefers the call log's `DURATION` and falls back to measuring the recording. Unset when neither source could tell — including for every call recorded before this field was populated, which is not backfillable.
 
 ### 6.4. Task Schema
 Represents an actionable task extracted from a call by the AI.

@@ -24,7 +24,8 @@ class AudioProcessor(
     private val callerLookup: CallerLookup,
     private val settingsStore: SettingsStore,
     private val tokenRefresher: TokenRefresher,
-    private val baseUrl: String = BackendConfig.BASE_URL
+    private val baseUrl: String = BackendConfig.BASE_URL,
+    private val audioDuration: AudioDuration = AudioDuration()
 ) {
 
     private val whisperClient = WhisperApiClient(openAiApiKey)
@@ -120,18 +121,27 @@ class AudioProcessor(
                     throw IllegalStateException("Transcript came back blank for ${audioFile.name}; not uploaded")
                 }
 
-                // FIX APPLIED HERE: Explicitly casting and typing the parameter to resolve the inference error.
-                val epochMillis = parsedInfo.toEpochMillis() as? Long
-                val callerNumber = epochMillis?.let { timestamp: Long ->
-                    callerLookup.findNumberNear(timestamp)
-                }
+                val callLogMatch = parsedInfo.toEpochMillis()?.let { callerLookup.findNear(it) }
+                    ?: CallLogMatch.NONE
+                val callerNumber = callLogMatch.number
                 println("8. Caller number: ${callerNumber ?: "unavailable"}")
+
+                // The call log is the truth about the call; the recording is only the
+                // truth about the file. Prefer the former, fall back to the latter, and
+                // accept "unknown" over blocking an upload. Measured off the original
+                // recording rather than the converted MP3: the original is the
+                // authoritative artifact, and it is still guaranteed to exist here —
+                // deleteOriginalIfEnabled does not run until much later, well after this.
+                val callLengthSeconds = callLogMatch.durationSeconds
+                    ?: audioDuration.secondsOf(audioFile)
+                println("8b. Call length: ${callLengthSeconds?.let { "${it}s" } ?: "unknown"}")
 
                 val payload = PendingUpload(
                     contactName = parsedInfo.contactName,
                     date = "${parsedInfo.date}_${parsedInfo.time}",
                     callerNumber = callerNumber,
-                    transcript = correctedTranscript
+                    transcript = correctedTranscript,
+                    callLengthSeconds = callLengthSeconds
                 )
 
                 println("9. Sending data to backend...")
@@ -349,6 +359,7 @@ class AudioProcessor(
                 put("date", payload.date)
                 put("transcript", payload.transcript)
                 put("callerNumber", payload.callerNumber ?: JSONObject.NULL)
+                put("callLength", payload.callLengthSeconds ?: JSONObject.NULL)
             }
 
             val request = Request.Builder()

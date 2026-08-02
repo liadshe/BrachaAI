@@ -29,6 +29,20 @@ const parseFilenameDate = (dateString: string): Date => {
   }
 };
 
+/**
+ * Whole seconds, or undefined for anything we will not stand behind.
+ *
+ * Deliberately never an error. `AudioProcessor.NON_RETRYABLE_CODES` treats a 400 as
+ * permanent — the client drops the payload and never retries it — so rejecting a call
+ * over a malformed duration would destroy the transcript to protect an integer.
+ */
+const parseCallLength = (raw: unknown): number | undefined => {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) {
+    return undefined;
+  }
+  return Math.round(raw);
+};
+
 export const getCalls = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -52,7 +66,7 @@ export const handleIncomingAndroidCall = async (
       return res.status(401).json({ success: false, message: 'Unauthenticated' });
     }
 
-    const { contactName, date, transcript, callerNumber } = req.body;
+    const { contactName, date, transcript, callerNumber, callLength } = req.body;
     if (!transcript) {
       return res.status(400).json({ success: false, message: 'transcript is required' });
     }
@@ -65,7 +79,8 @@ export const handleIncomingAndroidCall = async (
       userId,
       contact.id,
       transcript,
-      actualCallDate
+      actualCallDate,
+      parseCallLength(callLength)
     );
 
     const businessDescription = req.user?.businessDescription || '';
