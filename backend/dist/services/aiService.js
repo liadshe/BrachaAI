@@ -7,7 +7,7 @@ exports.analyzeTranscript = void 0;
 const openai_1 = __importDefault(require("openai"));
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
-const analyzeTranscript = async (transcript) => {
+const analyzeTranscript = async (transcript, businessDescription = '') => {
     const openai = new openai_1.default({
         apiKey: process.env.OPENAI_API_KEY
     });
@@ -17,6 +17,9 @@ const analyzeTranscript = async (transcript) => {
             {
                 role: "system",
                 content: `You process phone call transcripts.
+  Use the provided business description to understand the user's company and call context.
+  If a business description is not provided, proceed based only on the transcript.
+
   Respond ONLY with valid JSON — no markdown, no extra text:
   {
     "summary": "...",
@@ -50,7 +53,7 @@ const analyzeTranscript = async (transcript) => {
 
   IMPORTANT: Detect the language of the transcript and write the summary and all task text in that same language. Do not translate.`
             },
-            { role: "user", content: transcript }
+            { role: "user", content: `Business description: ${businessDescription || 'None provided'}\n\nTranscript:\n${transcript}` }
         ],
         response_format: { type: "json_object" }
     });
