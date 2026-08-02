@@ -99,7 +99,9 @@ class AudioProcessor(
                     throw IllegalStateException("Transcript came back blank for ${audioFile.name}; not uploaded")
                 }
 
-                val callerNumber = parsedInfo.toEpochMillis()?.let { callerLookup.findNumberNear(it) }
+                val callLogMatch = parsedInfo.toEpochMillis()?.let { callerLookup.findNear(it) }
+                    ?: CallLogMatch.NONE
+                val callerNumber = callLogMatch.number
                 println("8. Caller number: ${callerNumber ?: "unavailable"}")
 
                 val payload = PendingUpload(
