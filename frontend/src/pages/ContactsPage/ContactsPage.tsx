@@ -99,7 +99,7 @@ const ContactsPage: React.FC = () => {
                                                 </svg>
                                                 <span className={styles.phoneNumber}>{contact.phone}</span>
                                             </div>
-                                            <p className={styles.lastNote}>{contact.lastNote || 'No recent notes'}</p>
+                                            {contact.lastNote && <p className={styles.lastNote}>{contact.lastNote}</p>}
                                         </div>
                                     </div>
                                 ))

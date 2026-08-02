@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import apiClient from '../../services/apiClient';
 import BottomNav from '@/components/BottomNav';
 import styles from './TasksPage.module.css';
@@ -18,10 +19,29 @@ interface Task {
 }
 
 const TasksPage: React.FC = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    const getValidFilter = (param: string | null): 'All' | 'Today' | 'Overdue' | 'Done' => {
+        if (param === 'Overdue') return 'Overdue';
+        if (param === 'Done') return 'Done';
+        if (param === 'Today') return 'Today';
+        return 'All';
+    };
+
     const [tasks, setTasks] = useState<Task[]>([]);
     const [contacts, setContacts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [filter, setFilter] = useState<'All' | 'Today' | 'Overdue' | 'Done'>('All');
+    const [filter, setFilter] = useState<'All' | 'Today' | 'Overdue' | 'Done'>(() => getValidFilter(searchParams.get('filter')));
+
+    useEffect(() => {
+        const paramFilter = getValidFilter(searchParams.get('filter'));
+        setFilter(paramFilter);
+    }, [searchParams]);
+
+    const handleFilterChange = (newFilter: 'All' | 'Today' | 'Overdue' | 'Done') => {
+        setFilter(newFilter);
+        setSearchParams({ filter: newFilter });
+    };
 
     // Edit Modal State
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -151,7 +171,7 @@ const TasksPage: React.FC = () => {
                                 <button
                                     key={f}
                                     className={`${styles.filterBtn} ${filter === f ? styles.active : ''}`}
-                                    onClick={() => setFilter(f)}
+                                    onClick={() => handleFilterChange(f)}
                                 >
                                     {f}
                                 </button>

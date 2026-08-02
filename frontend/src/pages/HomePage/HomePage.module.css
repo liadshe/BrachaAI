@@ -112,6 +112,17 @@
     align-items: center;
     gap: 8px;
     text-align: center;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.statsCard:hover {
+    transform: translateY(-2px);
+    opacity: 0.9;
+}
+
+.statsCard:active {
+    transform: translateY(0);
 }
 
 .statsCard.blue { background-color: #eff6ff; color: #1d4ed8; }
