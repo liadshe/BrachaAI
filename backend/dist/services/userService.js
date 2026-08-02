@@ -37,7 +37,6 @@ const getOrCreateContact = async (userId, contactName, callerNumber = null) => {
         userId,
         name: contactName,
         phone: phone ?? exports.PLACEHOLDER_PHONE, // schema requires a phone
-        isVip: false,
     });
     console.log(`Created new contact: ${contactName}`);
     return created;

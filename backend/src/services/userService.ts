@@ -1,5 +1,4 @@
 import Contact from '../models/Contact';
-import User from '../models/User';
 
 export const PLACEHOLDER_PHONE = '000-000-000';
 
@@ -40,7 +39,6 @@ export const getOrCreateContact = async (
         userId,
         name: contactName,
         phone: phone ?? PLACEHOLDER_PHONE, // schema requires a phone
-        isVip: false,
     });
     console.log(`Created new contact: ${contactName}`);
     return created;

@@ -38,6 +38,5 @@ const ContactSchema = new mongoose_1.Schema({
     userId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
     name: { type: String, default: 'unknown' },
     phone: { type: String, required: true },
-    isVip: { type: Boolean, default: false }
 });
 exports.default = mongoose_1.default.model('Contact', ContactSchema);

@@ -146,11 +146,6 @@ reinstall. It reverts to the default (ON) in both cases.
 
 ### Related pre-existing bug, explicitly out of scope
 
-`backend/src/controllers/authController.ts:104` destructures only
-`{ name, phoneNumber, password, profilePicture }` from the request body. `settings` is ignored,
-so `PUT /auth/profile` never persists the existing `googleCalendarSync` and `autoCallRecording`
-toggles — they appear to save, then reset on next login when localStorage is overwritten.
-
 This design routes around that bug rather than fixing it. Fixing it is a separate change and
 should not be bundled here. **Noted so it is not mistaken for something this work introduced.**
 
