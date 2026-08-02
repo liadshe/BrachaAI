@@ -7,7 +7,7 @@ import { isObjectId } from '../utils/objectId';
 export const getContacts = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.id;
-        const contacts = await Contact.find({ userId }).sort({ name: 1 });
+        const contacts = await contactService.getContactsWithOpenTaskCounts(userId as string);
         res.status(200).json(contacts);
     } catch (error) {
         console.error('Get contacts error:', error);
