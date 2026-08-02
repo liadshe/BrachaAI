@@ -122,16 +122,21 @@ class AudioProcessor(
 
                 // FIX APPLIED HERE: Explicitly casting and typing the parameter to resolve the inference error.
                 val epochMillis = parsedInfo.toEpochMillis() as? Long
-                val callerNumber = epochMillis?.let { timestamp: Long ->
-                    callerLookup.findNumberNear(timestamp)
-                }
-                println("8. Caller number: ${callerNumber ?: "unavailable"}")
+                val callLogResult = epochMillis?.let { timestamp: Long ->
+                    callerLookup.findCallNear(timestamp)
+                } ?: CallLogResult(null, null)
+
+                val callerNumber = callLogResult.number
+                val callType = callLogResult.callType ?: "incoming"
+
+                println("8. Caller number: ${callerNumber ?: "unavailable"}, type: $callType")
 
                 val payload = PendingUpload(
                     contactName = parsedInfo.contactName,
                     date = "${parsedInfo.date}_${parsedInfo.time}",
                     callerNumber = callerNumber,
-                    transcript = correctedTranscript
+                    transcript = correctedTranscript,
+                    callType = callType
                 )
 
                 println("9. Sending data to backend...")
@@ -349,6 +354,7 @@ class AudioProcessor(
                 put("date", payload.date)
                 put("transcript", payload.transcript)
                 put("callerNumber", payload.callerNumber ?: JSONObject.NULL)
+                put("callType", payload.callType ?: "incoming")
             }
 
             val request = Request.Builder()

@@ -22,6 +22,7 @@ interface Call {
     fullTranscript: string;
     callDateTime: string;
     callLength?: number;
+    callType?: 'incoming' | 'outgoing' | 'missed';
 }
 
 interface Task {
@@ -385,7 +386,9 @@ const ContactDetailsPage: React.FC = () => {
                                                     </svg>
                                                 </div>
                                                 <div className={styles.callMeta}>
-                                                    <h3 className={styles.callTitle}>Incoming Call</h3>
+                                                    <h3 className={styles.callTitle}>
+                                                        {call.callType === 'outgoing' ? 'Outgoing Call' : call.callType === 'missed' ? 'Missed Call' : 'Incoming Call'}
+                                                    </h3>
                                                     <p className={styles.callTime}>{formatTime(call.callDateTime)} • {formatDuration(call.callLength)}</p>
                                                 </div>
                                             </div>

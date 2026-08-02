@@ -11,7 +11,8 @@ data class PendingUpload(
     val contactName: String,
     val date: String,
     val callerNumber: String?,
-    val transcript: String
+    val transcript: String,
+    val callType: String? = null
 )
 
 /**
@@ -46,6 +47,7 @@ class PendingUploadStore(private val dir: File) {
             put("date", upload.date)
             put("callerNumber", upload.callerNumber ?: JSONObject.NULL)
             put("transcript", upload.transcript)
+            put("callType", upload.callType ?: JSONObject.NULL)
         }
 
         val name = String.format("%013d-%03d.json", System.currentTimeMillis(), counter.getAndIncrement() % 1000)
@@ -85,11 +87,13 @@ class PendingUploadStore(private val dir: File) {
             try {
                 val json = JSONObject(file.readText())
                 val number = if (json.isNull("callerNumber")) null else json.getString("callerNumber")
+                val type = if (json.has("callType") && !json.isNull("callType")) json.getString("callType") else null
                 file to PendingUpload(
                     contactName = json.getString("contactName"),
                     date = json.getString("date"),
                     callerNumber = number,
-                    transcript = json.getString("transcript")
+                    transcript = json.getString("transcript"),
+                    callType = type
                 )
             } catch (e: Exception) {
                 quarantineUnlocked(file, e)

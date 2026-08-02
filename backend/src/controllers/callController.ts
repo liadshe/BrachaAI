@@ -52,12 +52,12 @@ export const handleIncomingAndroidCall = async (
       return res.status(401).json({ success: false, message: 'Unauthenticated' });
     }
 
-    const { contactName, date, transcript, callerNumber } = req.body;
+    const { contactName, date, transcript, callerNumber, callType } = req.body;
     if (!transcript) {
       return res.status(400).json({ success: false, message: 'transcript is required' });
     }
 
-    console.log(`[DEBUG] Android call webhook for userId: ${userId}`);
+    console.log(`[DEBUG] Android call webhook for userId: ${userId}, callType: ${callType || 'incoming'}`);
 
     const actualCallDate = parseFilenameDate(date);
     const contact = await userService.getOrCreateContact(userId, contactName, callerNumber ?? null);
@@ -65,7 +65,8 @@ export const handleIncomingAndroidCall = async (
       userId,
       contact.id,
       transcript,
-      actualCallDate
+      actualCallDate,
+      callType || 'incoming'
     );
 
     const businessDescription = req.user?.businessDescription || '';
