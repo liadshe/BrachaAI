@@ -195,7 +195,6 @@ Represents a business or personal contact associated with a user.
 *   **`userId`**: `ObjectId` (Required, Ref: `User`) - The user who owns this contact.
 *   **`name`**: `String` (Default: `'unknown'`) - The contact's name, parsed from the call recording filename.
 *   **`phone`**: `String` (Required) - The contact's phone number.
-*   **`isVip`**: `Boolean` (Default: `false`) - A flag to mark important contacts.
 
 ### 6.3. Call Schema
 Represents a single recorded and processed phone call.

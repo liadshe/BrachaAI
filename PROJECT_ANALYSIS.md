@@ -61,7 +61,6 @@ Backend (Express.js)
 - userId: ObjectId (required, ref User)
 - name: string (default: 'unknown')
 - phone: string (required)
-- isVip: boolean (default: false)
 
 **Call**
 - userId: ObjectId (required, ref User)
