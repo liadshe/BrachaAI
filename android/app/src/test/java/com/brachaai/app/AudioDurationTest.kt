@@ -10,6 +10,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowMediaMetadataRetriever
+import org.robolectric.shadows.util.DataSource
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -68,9 +69,28 @@ class AudioDurationTest {
     }
 
     @Test
-    fun reportsUnknownForAMissingFileRatherThanThrowing() {
-        // Must never throw: this runs on the upload path, and a duration we cannot
-        // measure must not cost a transcript.
+    fun reportsUnknownForAMissingFile() {
+        // Robolectric's ShadowMediaMetadataRetriever.setDataSource(String) never stats the
+        // file, so a missing file takes the same "no metadata registered" path as
+        // reportsUnknownWhenTheFileCarriesNoDuration above — it does not exercise the
+        // catch block. Kept as a cheap sanity check that a nonexistent path alone isn't
+        // treated specially; reportsUnknownWhenTheRetrieverThrows below is what actually
+        // covers the never-throws guarantee.
         assertNull(duration.secondsOf(java.io.File(tempFolder.root, "gone.m4a")))
+    }
+
+    @Test
+    fun reportsUnknownWhenTheRetrieverThrows() {
+        // Must never throw: this runs on the upload path, and a duration we cannot
+        // measure must not cost a transcript. Robolectric only throws from
+        // setDataSource when an exception has been pre-registered via addException,
+        // so this is the one test that actually reaches the catch block.
+        val file = tempFolder.newFile("broken.m4a")
+        ShadowMediaMetadataRetriever.addException(
+            DataSource.toDataSource(file.absolutePath),
+            RuntimeException("setDataSource failed")
+        )
+
+        assertNull(duration.secondsOf(file))
     }
 }

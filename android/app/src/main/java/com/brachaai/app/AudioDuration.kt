@@ -18,13 +18,21 @@ class AudioDuration {
 
     /**
      * Whole seconds, or `null` for anything we cannot measure — missing file, unreadable
-     * container, absent or nonsensical metadata, or a zero-length recording.
+     * container, absent, nonsensical, or out-of-range metadata, or a zero-length recording.
      *
-     * Never throws. This runs on the upload path, where the transcript is the thing worth
-     * protecting; a duration is not worth failing a call over.
+     * Never throws, including from allocating the retriever itself: its constructor calls
+     * into native code and can throw when the native retriever can't be allocated, which is
+     * exactly the kind of resource pressure this runs under (a large recording plus an
+     * FFmpeg transcode already in flight). This runs on the upload path, where the
+     * transcript is the thing worth protecting; a duration is not worth failing a call over.
      */
     fun secondsOf(file: File): Int? {
-        val retriever = MediaMetadataRetriever()
+        val retriever = try {
+            MediaMetadataRetriever()
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not create a metadata retriever", e)
+            return null
+        }
         return try {
             retriever.setDataSource(file.absolutePath)
             val millis = retriever
@@ -35,7 +43,12 @@ class AudioDuration {
                 Log.d(TAG, "No usable duration in ${file.name}")
                 null
             } else {
-                ((millis + 500) / 1000).toInt()
+                // millis + 500 can overflow a Long back into negative territory on
+                // corrupt-container metadata near Long.MAX_VALUE, and the overflowed
+                // value would then truncate silently through .toInt(). Check the
+                // converted result, not just the raw millis, so a bogus duration
+                // still comes out as "unknown" rather than a negative Int.
+                (((millis + 500) / 1000).toInt()).takeIf { it > 0 }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Could not read duration from ${file.name}", e)
