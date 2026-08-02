@@ -6,14 +6,18 @@ import android.util.Log
 import kotlin.math.abs
 
 /**
- * What the call log knew about a call. The two fields are independently nullable on
+ * What the call log knew about a call. The fields are independently nullable on
  * purpose: a withheld number carries a perfectly good duration, and a missed-call entry
  * carries a valid number with `DURATION = 0`.
  */
-data class CallLogMatch(val number: String?, val durationSeconds: Int?) {
+data class CallLogMatch(
+    val number: String?,
+    val durationSeconds: Int?,
+    val callType: String? = null
+) {
     companion object {
         /** Nothing usable: no permission, no matching entry, or a failed query. */
-        val NONE = CallLogMatch(null, null)
+        val NONE = CallLogMatch(null, null, null)
     }
 }
 
@@ -22,10 +26,11 @@ internal data class CallLogEntry(
     val number: String?,
     val dateMillis: Long,
     val durationSeconds: Int,
+    val rawType: Int = 1
 )
 
 /**
- * Finds the other party's number, and how long the call lasted, by matching the call log
+ * Finds the other party's number, call duration, and call direction by matching the call log
  * entry closest to the recording's start time.
  */
 class CallerLookup(context: Context) {
@@ -39,7 +44,7 @@ class CallerLookup(context: Context) {
         return try {
             appContext.contentResolver.query(
                 CallLog.Calls.CONTENT_URI,
-                arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.DATE, CallLog.Calls.DURATION),
+                arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.DATE, CallLog.Calls.DURATION, CallLog.Calls.TYPE),
                 "${CallLog.Calls.DATE} BETWEEN ? AND ?",
                 arrayOf(from.toString(), to.toString()),
                 "${CallLog.Calls.DATE} DESC"
@@ -47,6 +52,7 @@ class CallerLookup(context: Context) {
                 val numberIdx = cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER)
                 val dateIdx = cursor.getColumnIndexOrThrow(CallLog.Calls.DATE)
                 val durationIdx = cursor.getColumnIndexOrThrow(CallLog.Calls.DURATION)
+                val typeIdx = cursor.getColumnIndexOrThrow(CallLog.Calls.TYPE)
 
                 val entries = mutableListOf<CallLogEntry>()
                 while (cursor.moveToNext()) {
@@ -54,6 +60,7 @@ class CallerLookup(context: Context) {
                         number = cursor.getString(numberIdx),
                         dateMillis = cursor.getLong(dateIdx),
                         durationSeconds = cursor.getInt(durationIdx),
+                        rawType = cursor.getInt(typeIdx)
                     )
                 }
 
@@ -70,6 +77,9 @@ class CallerLookup(context: Context) {
         }
     }
 
+    fun findCallNear(callStartMillis: Long): CallLogMatch = findNear(callStartMillis)
+    fun findNumberNear(callStartMillis: Long): String? = findNear(callStartMillis).number
+
     /**
      * Picks the entry nearest [callStartMillis] and reduces it to what callers can use.
      *
@@ -83,11 +93,19 @@ class CallerLookup(context: Context) {
         val best = entries.minByOrNull { abs(it.dateMillis - callStartMillis) }
             ?: return CallLogMatch.NONE
 
+        val typeStr = when (best.rawType) {
+            CallLog.Calls.INCOMING_TYPE -> "incoming"
+            CallLog.Calls.OUTGOING_TYPE -> "outgoing"
+            CallLog.Calls.MISSED_TYPE -> "missed"
+            else -> "incoming"
+        }
+
         return CallLogMatch(
             number = normalize(best.number),
             // A missed or unanswered call is logged with 0. Never report that as a call
             // that lasted no time; it is a call whose length we do not know.
             durationSeconds = best.durationSeconds.takeIf { it > 0 },
+            callType = typeStr
         )
     }
 

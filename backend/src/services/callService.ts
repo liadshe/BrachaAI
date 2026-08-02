@@ -6,7 +6,8 @@ export const saveRawCall = async (
     contactId: string | mongoose.Types.ObjectId,
     transcript: string,
     callDate: Date,
-    callLengthSeconds?: number
+    callLengthSeconds?: number,
+    callType: string = 'incoming'
 ) => {
     return await Call.create({
         userId,
@@ -16,6 +17,7 @@ export const saveRawCall = async (
         // Spread rather than assigned: an unknown duration must leave the field unset, not
         // store an explicit null that later reads as a measured zero.
         ...(callLengthSeconds === undefined ? {} : { callLength: callLengthSeconds }),
+        callType: ['incoming', 'outgoing', 'missed'].includes(callType) ? callType : 'incoming',
     });
 };
 
