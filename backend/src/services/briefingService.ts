@@ -1,6 +1,7 @@
 import Contact from '../models/Contact';
 import Call from '../models/Call';
 import Task from '../models/Task';
+import { OPEN_TASK_FILTER } from './taskFilters';
 
 export interface BriefingTask {
     id: string;
@@ -27,13 +28,6 @@ export interface Briefing {
  * sync payload from ballooning for a contact with a long backlog.
  */
 export const MAX_OPEN_TASKS = 5;
-
-/**
- * A task is open only when both fields agree. `createTasksFromAi` writes `status` and lets
- * `completed` default; `updateTask` writes both. On disagreement we drop the task rather
- * than risk showing a finished one on screen during a call.
- */
-const OPEN_TASK_FILTER = { completed: false, status: { $ne: 'done' } };
 
 /** Excludes calls still awaiting AI analysis, so they cannot mask the last useful summary. */
 const SUMMARISED_CALL_FILTER = { callSummary: { $nin: [null, ''] } };
