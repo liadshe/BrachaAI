@@ -29,15 +29,12 @@ The badge on a contact card and the count on the ringing-call overlay describe t
 
 ```ts
 Contact.find({ userId }).sort({ name: 1 }).lean()
-Task.aggregate([
-  { $match: { userId, ...OPEN_TASK_FILTER } },
-  { $group: { _id: '$contactId', count: { $sum: 1 } } },
-])
+Task.find({ userId, ...OPEN_TASK_FILTER }).select('contactId').lean()
 ```
 
-The counts are keyed by `contactId` and merged onto the contacts in memory. This mirrors `briefingService.fetchRelated`, which made the same call for the same reason: an N+1 here would scale with the size of the address book, and the Contacts page loads the whole thing.
+The open tasks are tallied by `contactId` in memory and merged onto the contacts. This mirrors `briefingService.fetchRelated`, which made the same two-query call for the same reason: an N+1 here would scale with the size of the address book, and the Contacts page loads the whole thing.
 
-`userId` must be cast to `mongoose.Types.ObjectId` in the `$match` — the aggregation pipeline does not apply Mongoose's schema-based string-to-ObjectId coercion the way `find` does. A string `userId` silently matches nothing, which would present as every badge missing rather than as an error.
+A `$group` aggregation would move the tally into MongoDB and return one row per contact instead of one per task. It is rejected because the aggregation pipeline does not apply Mongoose's schema-based string-to-ObjectId coercion the way `find` does — `userId` would have to be cast by hand, and getting that wrong matches nothing silently, presenting as every badge missing rather than as an error. The volume this saves is negligible: the projection is a single ObjectId per open task, and `briefingService` already ships the same tasks with their titles and priorities attached.
 
 ### Response shape
 
@@ -56,7 +53,7 @@ Contacts with no open tasks are present in the response with `openTaskCount: 0`,
 The badge renders inside `clientHeader` on each card, only when `openTaskCount > 0`:
 
 - `1 task` (singular), `2 tasks` (plural).
-- `clientHeader` becomes `display: flex; justify-content: space-between; align-items: center`, putting the pill at the card's top-right beside the name.
+- `clientHeader` is already `display: flex; justify-content: space-between; align-items: center` (`ContactsPage.module.css:140`), so a second child lands at the card's top-right beside the name with no layout change.
 - New `.taskBadge` class in `ContactsPage.module.css`: rounded pill, soft amber background, small semibold text, `flex-shrink: 0` so a long contact name truncates rather than squeezing the badge.
 
 A contact with zero open tasks gets no badge at all. The list stays quiet, and a badge that appears means there is something to act on.
@@ -160,9 +157,12 @@ Vitest on backend and frontend, JUnit on Android, following the patterns already
 - `callLength` acceptance: a valid number persists; a string, a negative, and `NaN` are each dropped without failing the request; a call with no `callLength` saves as it does today.
 
 **Android**
-- `CallerLookup`: duration is read from the closest entry; `DURATION = 0` reads as unknown; a withheld number still yields its duration; a `SecurityException` yields `CallLogMatch(null, null)`.
-- `AudioProcessor`: the call-log duration is preferred when present; the audio measurement is used when it is not; both failing sends no duration and does not fail the upload.
+- `CallerLookup`: duration is read from the closest entry; `DURATION = 0` reads as unknown; a withheld number still yields its duration; a blank number does the same.
+- `AudioDuration`: reads whole seconds; rounds to the nearest; reports unknown for absent, unparseable, and zero-length metadata; returns null rather than throwing on a missing file.
+- `AudioProcessor`: the upload body carries `callLength`, and carries an explicit JSON null when the duration is unknown.
 - `PendingUploadStore`: round-trips an entry with a duration and one without; an entry written without the key (a pre-update queue file) parses with `callLengthSeconds = null` rather than being quarantined.
+
+The *choice* between the two duration sources is one expression inside `processAndSendToBackend`, which has no JVM seam — it runs FFmpeg, Whisper, and a live upload, which is why `AudioProcessorTest` already covers only the methods that can be driven directly. That branch is verified on device rather than in a unit test, as the rest of that pipeline is.
 
 **Frontend**
 - `formatDuration`: each row of the table above, plus the hour boundary at exactly `3600`.
