@@ -11,6 +11,7 @@ interface Contact {
     email?: string;
     lastNote?: string;
     initials?: string;
+    openTaskCount?: number;
 }
 
 const ContactsPage: React.FC = () => {
@@ -92,6 +93,11 @@ const ContactsPage: React.FC = () => {
                                         <div className={styles.clientInfo}>
                                             <div className={styles.clientHeader}>
                                                 <h3 className={styles.clientName}>{contact.name}</h3>
+                                                {contact.openTaskCount ? (
+                                                    <span className={styles.taskBadge}>
+                                                        {contact.openTaskCount} {contact.openTaskCount === 1 ? 'task' : 'tasks'}
+                                                    </span>
+                                                ) : null}
                                             </div>
                                             <div className={styles.phoneBox}>
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
