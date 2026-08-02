@@ -23,7 +23,8 @@ class AudioProcessor(
     private val callerLookup: CallerLookup,
     private val settingsStore: SettingsStore,
     private val tokenRefresher: TokenRefresher,
-    private val baseUrl: String = BackendConfig.BASE_URL
+    private val baseUrl: String = BackendConfig.BASE_URL,
+    private val audioDuration: AudioDuration = AudioDuration()
 ) {
 
     private val whisperClient = WhisperApiClient(openAiApiKey)
@@ -104,11 +105,21 @@ class AudioProcessor(
                 val callerNumber = callLogMatch.number
                 println("8. Caller number: ${callerNumber ?: "unavailable"}")
 
+                // The call log is the truth about the call; the recording is only the
+                // truth about the file. Prefer the former, fall back to the latter, and
+                // accept "unknown" over blocking an upload. Measured off the original
+                // recording, which still exists here — deleteOriginalIfEnabled runs much
+                // later, and the converted MP3 is gone on the conversion-failure path.
+                val callLengthSeconds = callLogMatch.durationSeconds
+                    ?: audioDuration.secondsOf(audioFile)
+                println("8b. Call length: ${callLengthSeconds?.let { "${it}s" } ?: "unknown"}")
+
                 val payload = PendingUpload(
                     contactName = parsedInfo.contactName,
                     date = "${parsedInfo.date}_${parsedInfo.time}",
                     callerNumber = callerNumber,
-                    transcript = correctedTranscript
+                    transcript = correctedTranscript,
+                    callLengthSeconds = callLengthSeconds
                 )
 
                 println("9. Sending data to backend...")
@@ -326,6 +337,7 @@ class AudioProcessor(
                 put("date", payload.date)
                 put("transcript", payload.transcript)
                 put("callerNumber", payload.callerNumber ?: JSONObject.NULL)
+                put("callLength", payload.callLengthSeconds ?: JSONObject.NULL)
             }
 
             val request = Request.Builder()
