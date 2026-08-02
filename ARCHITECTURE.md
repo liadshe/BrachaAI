@@ -58,6 +58,14 @@ The native Android application handles device-level interactions.
 *   **`AudioProcessor`**: Orchestrates the processing pipeline: parsing the filename, converting audio to MP3 via FFmpeg, and sending it for transcription.
 *   **`WhisperApiClient`**: A dedicated client for sending audio to the OpenAI Whisper API and receiving the Hebrew transcription.
 *   **`MainActivity`**: The main UI entry point, responsible for requesting permissions and hosting the WebView that renders the frontend application.
+*   **`PhoneStateReceiver`**: A manifest-registered broadcast receiver for `ACTION_PHONE_STATE_CHANGED`, the entry point of the incoming-call briefing overlay. It shows a card on RINGING and tears it down on IDLE.
+*   **`OverlayDecider`**: Pure decision logic, with no Android dependencies, that turns a ringing number into "show this briefing" or "show nothing" — so every branch of the ring path is unit-testable without the receiver or the service around it.
+*   **`CallOverlayService`**: Renders the briefing as a floating `WindowManager` card for the duration of the call, and refreshes it live from the backend while it is on screen. Requires the `SYSTEM_ALERT_WINDOW` permission.
+*   **`BriefingNotifier`**: The fallback renderer, used when the overlay permission is not held. Posts the same briefing as a silent high-importance notification.
+*   **`BriefingStore`**: The on-device snapshot (`briefings.json`) that the overlay reads when the phone rings, so a ringing call never has to wait on the network. Disposable derived data: a corrupt or missing snapshot means "no card until the next sync", never data loss.
+*   **`BriefingSync`**: Refreshes that snapshot from the backend on a periodic tick, after an upload, and when the app returns to the foreground.
+*   **`BriefingClient`**: A dedicated client for the backend's briefing endpoints, sharing the upload path's token-refresh handling.
+*   **`PhoneNormalizer`**: Reduces every spelling of a phone number — with or without a country code, with a leading zero, withheld-call sentinels — to a single lookup key. The only place phone formats are interpreted, and the reason contact matching never has to happen on the backend.
 *   **`app/src/main/assets/www/`**: This directory contains the production build of the frontend application. The GitHub Actions workflow automatically builds the frontend and copies the assets here, enabling the hybrid app approach.
 
 ### 3.2. `backend/`
@@ -69,6 +77,7 @@ The central API and data processing engine.
 *   **`routes/`**: Defines the API endpoints and maps them to the appropriate controllers.
 *   **`services/`**: Encapsulates business logic.
     *   `aiService.ts`: Interacts with the OpenAI GPT-4o API to analyze transcripts, generate summaries, and create structured task lists.
+    *   `briefingService.ts`: Assembles the per-contact briefing (most recent summarised call, plus a capped, priority-sorted list of open tasks and the untruncated open-task count) that the Android overlay shows when a known contact calls.
     *   `callService.ts`, `taskService.ts`, `userService.ts`: Handle CRUD operations and business logic related to their respective domains.
 *   **`index.ts`**: The server entry point. It initializes the Express app, connects to MongoDB, and starts the server.
 
@@ -110,6 +119,10 @@ The primary data flow is initiated by a phone call on the Android device.
     *   The user opens the BrachaAI application (either via a web browser or the Android app).
     *   The React frontend makes authenticated `GET` requests to the backend API (e.g., `/api/calls`, `/api/tasks`) to fetch and display data.
     *   Users can view call summaries, full transcripts, and manage their tasks and contacts. All user-initiated changes (e.g., updating a task's status) result in API calls to the backend, which updates the state in MongoDB.
+7.  **Incoming-Call Briefing (Android)**:
+    *   Independently of the flow above, the Android app periodically calls `GET /api/briefings` (on a timer, after every upload, and when the app comes to the foreground) to fetch a briefing for every contact and caches it on-device.
+    *   When the phone rings, the app matches the caller against this on-device cache — no network round trip on the ring path — and, for a known contact with a summary or open tasks, shows a floating card (or a notification, if it lacks the overlay permission) with the contact's name, last call summary, and open tasks.
+    *   `GET /api/briefings/:contactId` refreshes a single contact's briefing while its card is on screen.
 
 ```mermaid
 sequenceDiagram

@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:id="@+id/overlay_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/overlay_card_background"
+        android:padding="20dp"
+        android:elevation="8dp">
+
+        <View
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center_horizontal"
+            android:background="@drawable/overlay_avatar_background" />
+
+        <TextView
+            android:id="@+id/overlay_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center_horizontal"
+            android:textColor="@color/overlay_primary_text"
+            android:textSize="17sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <LinearLayout
+            android:id="@+id/overlay_summary_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="18dp"
+                android:background="@color/overlay_divider" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/overlay_last_interaction"
+                android:textColor="@color/overlay_secondary_text"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/overlay_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="@color/overlay_primary_text"
+                android:textSize="15sp"
+                android:maxLines="3"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/overlay_tasks_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="18dp"
+                android:background="@color/overlay_divider" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/overlay_open_tasks"
+                android:textColor="@color/overlay_secondary_text"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:id="@+id/overlay_tasks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/overlay_more_tasks"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="@color/overlay_secondary_text"
+                android:textSize="13sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!--
+      48dp is the minimum accessible touch target. The glyph stays at 16sp and stays put:
+      the box grew by 16dp on each axis and the margins shrank by the matching 8dp, so the
+      ✕ sits exactly where it did before. Worth the care because every other pixel of this
+      card opens the app over a ringing call, so a near miss on the close button is not a
+      no-op — it launches MainActivity mid-ring.
+
+      elevation MUST stay above the card's 8dp. Since API 21 a ViewGroup draws and hit-tests
+      its children ordered by Z (elevation + translationZ), NOT by declaration order — so at
+      the default 0dp this button was painted underneath the opaque card and was completely
+      invisible, and taps in its corner fell through to the card and launched the app instead
+      of dismissing. Declaring it last is not enough.
+    -->
+    <TextView
+        android:id="@+id/overlay_close"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="12dp"
+        android:elevation="12dp"
+        android:gravity="center"
+        android:text="✕"
+        android:textColor="@color/overlay_secondary_text"
+        android:textSize="18sp"
+        android:contentDescription="@string/overlay_close" />
+</FrameLayout>

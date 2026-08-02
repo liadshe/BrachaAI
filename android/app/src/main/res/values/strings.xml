@@ -1,3 +1,16 @@
 <resources>
     <string name="app_name">BrachaAI</string>
+    <string name="overlay_last_interaction">Last Interaction</string>
+    <string name="overlay_open_tasks">Open Tasks</string>
+    <string name="overlay_more_tasks">+%1$d more</string>
+    <string name="overlay_close">Close</string>
+    <string name="overlay_permission_title">Know why they\'re calling</string>
+    <!--
+      Quotes Android's own wording for the toggle on purpose — the button opens a Settings
+      screen where that exact phrase is what the user has to find.
+    -->
+    <string name="overlay_permission_body">When a contact calls, BrachaAI can show your last summary with them and their open tasks, right over the call screen. Android lists this as \"Display over other apps\".</string>
+    <!-- Says what the button actually does: it opens Settings, it does not grant anything. -->
+    <string name="overlay_permission_enable">Open settings</string>
+    <string name="overlay_permission_dismiss">Not now</string>
 </resources>

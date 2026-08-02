@@ -151,4 +151,65 @@ class TokenRefresherTest {
         assertEquals(1, server.requestCount)
         assertEquals("fresh", store.getToken())
     }
+
+    @Test
+    fun `two separate TokenRefresher instances over one store still issue a single request`() {
+        // Regression test for the per-instance-lock bug: CallOverlayService.refreshInBackground()
+        // builds a brand new AuthStore + TokenRefresher every time a briefing card is shown,
+        // while CallMonitorService shares one long-lived instance for uploads and briefing
+        // sync. If refresh() synchronizes on `this`, those are different monitors and this
+        // test's two refreshers race exactly like the overlay and the monitor service would:
+        // both see the caller's token is stale, both redeem the single-use refresh token, and
+        // the backend's rejection of the second, already-spent redemption comes back as a 401
+        // -- which refresh() treats as a genuine logout and clears the session.
+        //
+        // The first response is delayed so the second refresher's read of the store is forced
+        // to happen while the first request is still in flight (i.e. genuinely concurrent, not
+        // just "called around the same time"). The second response is a 401: that is what a
+        // real backend does to a stale/already-rotated refresh token, so if the lock is broken
+        // and a second request actually goes out, it fails exactly the way the bug describes.
+        // With a process-wide lock this second response is never consumed: the second call
+        // blocks until the first releases the lock, then finds the store already rotated and
+        // takes the early-return short-circuit instead of redeeming the token again.
+        val store = FakeTokenStore(accessToken = "stale", refreshToken = "r1")
+        server.enqueue(okBody("fresh", "r2").setBodyDelay(300, TimeUnit.MILLISECONDS))
+        server.enqueue(MockResponse().setResponseCode(401))
+
+        val refresherA = refresherFor(store)
+        val refresherB = refresherFor(store)
+
+        val start = CountDownLatch(1)
+        val done = CountDownLatch(2)
+        val results = java.util.Collections.synchronizedList(mutableListOf<String?>())
+
+        val threadA = Thread {
+            start.await()
+            results.add(refresherA.refresh("stale"))
+            done.countDown()
+        }
+        val threadB = Thread {
+            start.await()
+            results.add(refresherB.refresh("stale"))
+            done.countDown()
+        }
+        threadA.start()
+        threadB.start()
+        start.countDown()
+        done.await(10, TimeUnit.SECONDS)
+
+        // Exactly one HTTP round trip: the queued 401 is only there to fail loudly if the
+        // lock regresses to per-instance, and it must be left unconsumed.
+        assertEquals(1, server.requestCount)
+        // Both callers walk away with the rotated token -- the second by blocking and then
+        // taking the short-circuit, not by redeeming its own. The threads finish in
+        // nondeterministic order, so compare as a sorted List<String>; `results` is a
+        // MutableList<String?> and String? is not Comparable, hence the map. A null (a
+        // caller that failed to refresh) is mapped to a sentinel rather than dropped, so a
+        // regression fails the assertion loudly instead of silently shrinking the list.
+        assertEquals(listOf("fresh", "fresh"), results.map { it ?: "<null>" }.sorted())
+        // The whole point: no spurious logout from a concurrent, differently-instanced refresh.
+        assertEquals(0, store.clearCount)
+        assertEquals("fresh", store.getToken())
+        assertEquals("r2", store.getRefreshToken())
+    }
 }

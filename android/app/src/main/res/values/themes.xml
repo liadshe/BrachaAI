@@ -2,4 +2,5 @@
 <resources>
 
     <style name="Theme.BrachaAI" parent="android:Theme.Material.Light.NoActionBar" />
+
 </resources>

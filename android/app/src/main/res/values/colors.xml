@@ -7,4 +7,26 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="overlay_card_background">#FF1C2333</color>
+    <color name="overlay_card_stroke">#FF2E3950</color>
+    <color name="overlay_primary_text">#FFF2F5FA</color>
+    <color name="overlay_secondary_text">#FF9AA7BD</color>
+    <color name="overlay_accent">#FF2F6BFF</color>
+    <color name="overlay_task_bullet">#FFFF7A45</color>
+    <color name="overlay_divider">#FF2A3346</color>
+
+    <!--
+      The in-app permission prompt is native Compose sitting on top of the web UI, so it
+      borrows the web app's own dialog palette rather than Material defaults — otherwise it
+      reads as a foreign system dialog pasted over the product. Sourced from
+      frontend/src/components/ConfirmDialog.module.css and the primary colour token in
+      frontend/src/styles/global.css. Update both together.
+    -->
+    <color name="prompt_surface">#FFFFFFFF</color>
+    <color name="prompt_border">#FFF1F5F9</color>
+    <color name="prompt_title">#FF0F172A</color>
+    <color name="prompt_body">#FF475569</color>
+    <color name="prompt_accent">#FF6366F1</color>
+    <color name="prompt_accent_tint">#FFEEF2FF</color>
+    <color name="prompt_secondary_fill">#FFF1F5F9</color>
 </resources>

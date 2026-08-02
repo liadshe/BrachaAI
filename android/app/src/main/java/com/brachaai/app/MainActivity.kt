@@ -13,20 +13,46 @@ import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
 
     private var permissionsGranted by mutableStateOf(false)
     private var allFilesGranted by mutableStateOf(false)
+    private var overlayPromptDismissed by mutableStateOf(false)
+    private var canDrawOverlays by mutableStateOf(false)
+
+    /**
+     * Guards the opportunistic optional-permission request so it fires at most once per
+     * process launch. READ_CALL_LOG is hard-restricted and auto-denied on API 29+ (see the
+     * comment on optionalPermissions below), which makes `optionalPermissions.any { !hasPermission(it) } }`
+     * permanently true for most users; without this guard, refreshPermissionState() — called
+     * from both onCreate and onResume, including the onResume triggered by the launcher's own
+     * dialog resolving — would relaunch the request forever. A fresh process launch resets
+     * this to false, so a user who reconsiders still gets asked again next time they open the
+     * app, which is the right cadence for a permission they might change their mind about.
+     */
+    private var optionalPermissionsRequested = false
+    private var startUrl by mutableStateOf(WEB_URL)
     private var webView: AndroidWebView? = null
 
     private val requiredPermissions: Array<String>
@@ -39,13 +65,26 @@ class MainActivity : ComponentActivity() {
             }
         }.toTypedArray()
 
-    // READ_CALL_LOG is requested opportunistically (so users who grant it still get caller
-    // numbers) but deliberately excluded from requiredPermissions: it's hard-restricted on
-    // API 29+ and can be denied instantly with no dialog, and it must never block the WebView
-    // from rendering — the WebView is the only place the auth token comes from. A denial or
-    // no-op here is fully handled downstream: CallerLookup.findNumberNear catches
-    // SecurityException and returns null, and the backend accepts callerNumber: null.
-    private val optionalPermissions: Array<String> = arrayOf(Manifest.permission.READ_CALL_LOG)
+    /**
+     * Requested opportunistically, never gating. Both are dangerous permissions, so the
+     * manifest declaration alone grants nothing — they have to be asked for at runtime — but
+     * neither may block the WebView from rendering, because the WebView is the only place
+     * the auth token comes from. Gating login on an optional feature is exactly what the
+     * design spec forbids, so a denial degrades that one feature and nothing else.
+     *
+     * - READ_CALL_LOG: caller-number lookup for recordings. Hard-restricted on API 29+ and
+     *   can be denied instantly with no dialog. A denial is fully handled downstream —
+     *   CallerLookup.findNumberNear catches SecurityException and returns null, and the
+     *   backend accepts callerNumber: null.
+     * - READ_PHONE_STATE: the incoming-call briefing overlay. ACTION_PHONE_STATE_CHANGED is
+     *   broadcast with READ_PHONE_STATE as a required receiver permission, so without the
+     *   runtime grant PhoneStateReceiver.onReceive is simply never invoked and the overlay
+     *   never appears. A denial means no briefing card; everything else works unchanged.
+     */
+    private val optionalPermissions: Array<String> = arrayOf(
+        Manifest.permission.READ_CALL_LOG,
+        Manifest.permission.READ_PHONE_STATE,
+    )
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -68,6 +107,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        startUrl = urlFor(intent)
         refreshPermissionState()
 
         setContent {
@@ -77,11 +117,19 @@ class MainActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.Center
             ) {
                 if (permissionsGranted && allFilesGranted) {
-                    WebViewScreen(
-                        url = "file:///android_asset/www/index.html",
-                        onAuthenticated = { CallMonitorService.requestFlush(this@MainActivity) }
-                    ) { wv ->
-                        webView = wv
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        WebViewScreen(
+                            url = startUrl,
+                            onAuthenticated = { CallMonitorService.requestFlush(this@MainActivity) }
+                        ) { wv ->
+                            webView = wv
+                        }
+                        if (!canDrawOverlays && !overlayPromptDismissed) {
+                            OverlayPermissionPrompt(
+                                onEnable = { openOverlaySettings() },
+                                onDismiss = { overlayPromptDismissed = true },
+                            )
+                        }
                     }
                 } else if (!allFilesGranted) {
                     Text(
@@ -102,19 +150,52 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val target = urlFor(intent)
+        startUrl = target
+        webView?.loadUrl(target)
+    }
+
+    /**
+     * The web app uses HashRouter, so a route is a fragment on the bundled index.html.
+     */
+    private fun urlFor(intent: Intent?): String {
+        val contactId = intent?.getStringExtra(EXTRA_CONTACT_ID)
+        return if (contactId.isNullOrBlank()) WEB_URL else "$WEB_URL#/contacts/${Uri.encode(contactId)}"
+    }
+
     override fun onResume() {
         super.onResume()
         refreshPermissionState()
+        // The user may have edited tasks in the WebView; keep the overlay's snapshot honest.
+        if (CallMonitorService.isRunning) {
+            CallMonitorService.requestBriefingSync(this)
+        }
     }
 
     private fun refreshPermissionState() {
+        canDrawOverlays = CallOverlayService.canDrawOverlays(this)
         permissionsGranted = hasPermissions()
         allFilesGranted = hasAllFilesAccess()
         if (!permissionsGranted && requiredPermissions.isNotEmpty()) {
             permissionLauncher.launch(requiredPermissions + optionalPermissions)
-        } else if (!hasPermission(Manifest.permission.READ_CALL_LOG)) {
+        } else if (!optionalPermissionsRequested && optionalPermissions.any { !hasPermission(it) }) {
             // Required permissions are already satisfied (or there are none to ask for on
-            // this SDK level). Ask for READ_CALL_LOG on its own — opportunistic, non-gating.
+            // this SDK level). Ask for the optional ones on their own — opportunistic and
+            // non-gating. Checked as "any still missing" rather than against one named
+            // permission, so an existing install that already granted READ_CALL_LOG is
+            // still prompted for READ_PHONE_STATE, and anything added to the array later is
+            // picked up here without a second edit.
+            //
+            // Guarded by optionalPermissionsRequested so this fires at most once per process
+            // launch: READ_CALL_LOG is auto-denied on API 29+, which would otherwise make this
+            // branch permanently true and re-launch the request on every resume forever
+            // (including the resume caused by the launcher's own dialog closing). Once this
+            // has run, a still-missing optional permission falls through to the branch below,
+            // which still starts the service if everything else required is in place.
+            optionalPermissionsRequested = true
             permissionLauncher.launch(optionalPermissions)
             if (permissionsGranted && allFilesGranted) startMonitorService()
         } else if (permissionsGranted && allFilesGranted) {
@@ -141,5 +222,137 @@ class MainActivity : ComponentActivity() {
         if (!CallMonitorService.isRunning) {
             startForegroundService(Intent(this, CallMonitorService::class.java))
         }
+    }
+
+    @Composable
+    private fun BoxScope.OverlayPermissionPrompt(onEnable: () -> Unit, onDismiss: () -> Unit) {
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = BOTTOM_NAV_CLEARANCE + 16.dp),
+            // Matches the web app's own dialog: white, heavily rounded, hairline border, and
+            // a soft lift rather than a Material tonal fill. A default Material3 Card here
+            // reads as a system dialog dropped on top of the product.
+            shape = RoundedCornerShape(28.dp),
+            color = colorResource(R.color.prompt_surface),
+            border = BorderStroke(1.dp, colorResource(R.color.prompt_border)),
+            shadowElevation = 16.dp,
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(
+                            colorResource(R.color.prompt_accent_tint),
+                            RoundedCornerShape(14.dp),
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_overlay_window),
+                        // The heading already names the feature; the mark is decoration.
+                        contentDescription = null,
+                        tint = colorResource(R.color.prompt_accent),
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    stringResource(R.string.overlay_permission_title),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colorResource(R.color.prompt_title),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.overlay_permission_body),
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp,
+                    color = colorResource(R.color.prompt_body),
+                    textAlign = TextAlign.Start,
+                )
+
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    // Equal weights, declining first: this prompt is an offer, not a demand,
+                    // so "Not now" is a peer of the primary action rather than a hidden
+                    // text link — the user is meant to be able to refuse it comfortably.
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = null,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colorResource(R.color.prompt_secondary_fill),
+                            contentColor = colorResource(R.color.prompt_body),
+                        ),
+                    ) {
+                        Text(
+                            stringResource(R.string.overlay_permission_dismiss),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    Button(
+                        onClick = onEnable,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = null,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colorResource(R.color.prompt_accent),
+                            contentColor = Color.White,
+                        ),
+                    ) {
+                        Text(
+                            stringResource(R.string.overlay_permission_enable),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun openOverlaySettings() {
+        startActivity(
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                data = Uri.parse("package:$packageName")
+            }
+        )
+    }
+
+    companion object {
+        /** Set by the caller-briefing card; opens the app on that contact. See Task 11. */
+        const val EXTRA_CONTACT_ID = "com.brachaai.app.extra.CONTACT_ID"
+        private const val WEB_URL = "file:///android_asset/www/index.html"
+
+        /**
+         * Bottom clearance so the overlay-permission prompt doesn't sit on top of the web
+         * frontend's fixed bottom nav bar (frontend/src/components/BottomNav.module.css).
+         *
+         * Measured fact: the nav's real rendered height is 72dp. `min-height: 72px` is under
+         * `box-sizing: border-box` (global `* { box-sizing: border-box }` reset in
+         * frontend/src/styles/global.css, imported via App.tsx), so the vertical padding is
+         * absorbed into that 72px rather than adding to it. The bottom padding term,
+         * `env(safe-area-inset-bottom, 12px)`, resolves to 0 here — Chromium supports the
+         * `env()` variable, so the `12px` fallback never applies; it only would on an engine
+         * that doesn't recognize `env()` at all. It resolves to 0 specifically because this
+         * WebView is not rendered edge-to-edge (no `WindowCompat`/`setDecorFitsSystemWindows`
+         * anywhere in android/, theme is `Theme.Material.Light.NoActionBar`), so there's no
+         * system-bar cutout for the safe-area inset to account for. That also means 72dp is a
+         * stable figure, not a lower bound that could grow with a gesture nav bar.
+         *
+         * Chosen margin: 96dp = 72dp (measured) + 24dp deliberate safety margin.
+         *
+         * Must be updated by hand if BottomNav's height, or the app's edge-to-edge status,
+         * changes.
+         */
+        private val BOTTOM_NAV_CLEARANCE = 96.dp
     }
 }

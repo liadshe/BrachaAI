@@ -36,4 +36,32 @@ class NativeBridgeTest {
         newBridge().setDeleteAudioAfterProcessing(true)
         assertTrue(SettingsStore(app).deleteAudioAfterProcessing)
     }
+
+    // Privacy: cached briefings are the signed-out user's call summaries and open tasks.
+    // Nothing downstream would ever overwrite them -- BriefingClient returns null with no
+    // token and BriefingSync keeps the previous snapshot on a null fetch -- so if clearAuth
+    // doesn't drop them here, the next person to hold the phone sees them over the ringing
+    // screen, permanently.
+    @Test
+    fun clearAuthDropsTheCachedBriefings() {
+        val app = RuntimeEnvironment.getApplication()
+        val store = BriefingStore.default(app.filesDir)
+        store.replaceAll(
+            listOf(
+                Briefing(
+                    contactId = "c1",
+                    name = "David Cohen",
+                    phone = "+972501234567",
+                    lastCallSummary = "Promised to send price quote.",
+                    openTasks = listOf(BriefingTask("t1", "Send contract by Tuesday", "HIGH")),
+                    openTaskCount = 1,
+                )
+            )
+        )
+        assertTrue(store.readAll().isNotEmpty())
+
+        newBridge().clearAuth()
+
+        assertTrue(BriefingStore.default(app.filesDir).readAll().isEmpty())
+    }
 }

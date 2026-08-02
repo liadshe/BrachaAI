@@ -1,0 +1,158 @@
+package com.brachaai.app
+
+import android.util.Log
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
+
+data class BriefingTask(
+    val id: String,
+    val title: String,
+    val priority: String,
+)
+
+/**
+ * How many open tasks a briefing card shows before truncating to "+N more".
+ *
+ * Shared by [CallOverlayService] and [BriefingNotifier] so the two renderers read the same
+ * value as equals rather than one importing it from the other, and so "+N more" is always
+ * computed as `openTaskCount - (list actually shown).size` in both places.
+ */
+const val MAX_TASKS_SHOWN = 3
+
+/**
+ * How long a briefing may stay on screen without a call-ended broadcast.
+ *
+ * Backstop only — `EXTRA_STATE_IDLE` is what normally tears both renderers down. Set well
+ * past any plausible call length.
+ *
+ * Shared by [CallOverlayService] (as a delayed teardown) and [BriefingNotifier] (as
+ * `setTimeoutAfter`) for the same reason as [MAX_TASKS_SHOWN]: read as peers so the two
+ * renderers cannot disagree. The overlay had this backstop and the notification did not, so
+ * a missed IDLE left call summaries sitting in the shade indefinitely.
+ */
+val MAX_BRIEFING_LIFETIME_MS: Long = TimeUnit.MINUTES.toMillis(30)
+
+/**
+ * Gap between the top of the screen and the card, in dp.
+ *
+ * Shared by both renderers so the card lands in the same place whether it is a
+ * `WindowManager` window (unlocked) or an Activity over the keyguard (locked) — the point of
+ * the locked path is that the user cannot tell the difference.
+ *
+ * Both apply it to a `WindowManager.LayoutParams.y`, which is denominated in raw PIXELS
+ * unlike every dp value in the layout XML, so both must convert it through
+ * `resources.displayMetrics.density`.
+ */
+const val OVERLAY_TOP_MARGIN_DP = 48
+
+/**
+ * What the overlay shows for one contact: who they are, what was last discussed, what is
+ * still open.
+ *
+ * [openTaskCount] is the untruncated total. [openTasks] is capped by the backend and capped
+ * again by the card, so counting the list would understate "+N more".
+ */
+data class Briefing(
+    val contactId: String,
+    val name: String,
+    val phone: String,
+    val lastCallSummary: String?,
+    val openTasks: List<BriefingTask>,
+    val openTaskCount: Int,
+) {
+
+    /**
+     * Whether there is anything worth putting on screen — the design's "Both absent → no card
+     * at all". Without a summary and without open tasks the card is an avatar, a name and a
+     * close button.
+     *
+     * Lives on the model rather than inside [OverlayDecider] because three separate paths
+     * reach a renderer: the receiver's decision, [CallOverlayService]'s own lookup when the
+     * intent arrives, and the live refresh that repaints a card already on screen. The
+     * predicate was only enforced on the first, so the other two could each paint an empty
+     * card. Keeping it here means a new render path gets the invariant by construction
+     * instead of having to remember to re-implement it.
+     */
+    val hasContent: Boolean
+        get() = !lastCallSummary.isNullOrBlank() || openTasks.isNotEmpty()
+
+    fun toJson(): JSONObject {
+        val tasks = JSONArray()
+        openTasks.forEach { task ->
+            tasks.put(
+                JSONObject()
+                    .put("id", task.id)
+                    .put("title", task.title)
+                    .put("priority", task.priority)
+            )
+        }
+        return JSONObject()
+            .put("contactId", contactId)
+            .put("name", name)
+            .put("phone", phone)
+            .put("lastCallSummary", lastCallSummary ?: JSONObject.NULL)
+            .put("openTasks", tasks)
+            .put("openTaskCount", openTaskCount)
+    }
+
+    companion object {
+        private const val TAG = "Briefing"
+
+        /**
+         * Parses one briefing, from either the backend response or the on-disk cache — the
+         * two use the same shape deliberately, so a synced payload can be written straight
+         * back out.
+         *
+         * Returns null for an entry missing the fields that identify a contact, so one bad
+         * record cannot take the whole snapshot down with it.
+         */
+        fun fromJson(json: JSONObject): Briefing? {
+            val contactId = json.optString("contactId")
+            val phone = json.optString("phone")
+            if (contactId.isBlank() || phone.isBlank()) {
+                Log.w(TAG, "Skipping briefing entry with no contact id or phone")
+                return null
+            }
+
+            val summary = if (json.isNull("lastCallSummary")) {
+                null
+            } else {
+                json.optString("lastCallSummary").ifBlank { null }
+            }
+
+            val tasksJson = json.optJSONArray("openTasks") ?: JSONArray()
+            val tasks = (0 until tasksJson.length()).mapNotNull { index ->
+                val task = tasksJson.optJSONObject(index) ?: return@mapNotNull null
+                val title = task.optString("title")
+                if (title.isBlank()) null
+                else BriefingTask(
+                    id = task.optString("id"),
+                    title = title,
+                    priority = task.optString("priority").ifBlank { "LOW" },
+                )
+            }
+
+            return Briefing(
+                contactId = contactId,
+                name = json.optString("name").ifBlank { "Unknown" },
+                phone = phone,
+                lastCallSummary = summary,
+                openTasks = tasks,
+                openTaskCount = json.optInt("openTaskCount", tasks.size),
+            )
+        }
+    }
+}
+
+/**
+ * The backend sends `lastCall: { summary, dateTime }`; the card only ever shows the summary.
+ * Flattening here keeps the date out of the device model entirely rather than carrying an
+ * unused timestamp through the cache.
+ */
+fun briefingFromBackendJson(json: JSONObject): Briefing? {
+    val lastCall = json.optJSONObject("lastCall")
+    val flattened = JSONObject(json.toString())
+        .put("lastCallSummary", lastCall?.optString("summary")?.ifBlank { null } ?: JSONObject.NULL)
+    return Briefing.fromJson(flattened)
+}
