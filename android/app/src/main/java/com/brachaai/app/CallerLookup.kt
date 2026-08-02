@@ -6,50 +6,89 @@ import android.util.Log
 import kotlin.math.abs
 
 /**
- * Finds the phone number of the other party by matching the call log entry
- * closest to the recording's start time.
+ * What the call log knew about a call. The two fields are independently nullable on
+ * purpose: a withheld number carries a perfectly good duration, and a missed-call entry
+ * carries a valid number with `DURATION = 0`.
+ */
+data class CallLogMatch(val number: String?, val durationSeconds: Int?) {
+    companion object {
+        /** Nothing usable: no permission, no matching entry, or a failed query. */
+        val NONE = CallLogMatch(null, null)
+    }
+}
+
+/** One raw call log row, before normalization. Internal so the tests can build them. */
+internal data class CallLogEntry(
+    val number: String?,
+    val dateMillis: Long,
+    val durationSeconds: Int,
+)
+
+/**
+ * Finds the other party's number, and how long the call lasted, by matching the call log
+ * entry closest to the recording's start time.
  */
 class CallerLookup(context: Context) {
 
     private val appContext = context.applicationContext
 
-    fun findNumberNear(callStartMillis: Long): String? {
+    fun findNear(callStartMillis: Long): CallLogMatch {
         val from = callStartMillis - TOLERANCE_MS
         val to = callStartMillis + TOLERANCE_MS
 
         return try {
             appContext.contentResolver.query(
                 CallLog.Calls.CONTENT_URI,
-                arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.DATE),
+                arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.DATE, CallLog.Calls.DURATION),
                 "${CallLog.Calls.DATE} BETWEEN ? AND ?",
                 arrayOf(from.toString(), to.toString()),
                 "${CallLog.Calls.DATE} DESC"
             )?.use { cursor ->
                 val numberIdx = cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER)
                 val dateIdx = cursor.getColumnIndexOrThrow(CallLog.Calls.DATE)
+                val durationIdx = cursor.getColumnIndexOrThrow(CallLog.Calls.DURATION)
 
-                var best: String? = null
-                var bestDelta = Long.MAX_VALUE
-
+                val entries = mutableListOf<CallLogEntry>()
                 while (cursor.moveToNext()) {
-                    val delta = abs(cursor.getLong(dateIdx) - callStartMillis)
-                    if (delta < bestDelta) {
-                        bestDelta = delta
-                        best = cursor.getString(numberIdx)
-                    }
+                    entries += CallLogEntry(
+                        number = cursor.getString(numberIdx),
+                        dateMillis = cursor.getLong(dateIdx),
+                        durationSeconds = cursor.getInt(durationIdx),
+                    )
                 }
 
-                normalize(best).also {
-                    if (it == null) Log.d(TAG, "No usable caller number near $callStartMillis")
+                selectBest(entries, callStartMillis).also {
+                    if (it.number == null) Log.d(TAG, "No usable caller number near $callStartMillis")
                 }
-            }
+            } ?: CallLogMatch.NONE
         } catch (e: SecurityException) {
-            Log.w(TAG, "READ_CALL_LOG not granted; caller number unavailable")
-            null
+            Log.w(TAG, "READ_CALL_LOG not granted; caller number and duration unavailable")
+            CallLogMatch.NONE
         } catch (e: Exception) {
             Log.w(TAG, "Call log lookup failed", e)
-            null
+            CallLogMatch.NONE
         }
+    }
+
+    /**
+     * Picks the entry nearest [callStartMillis] and reduces it to what callers can use.
+     *
+     * Pure, and `internal` rather than private, so every branch is unit-testable without a
+     * ContentResolver — Robolectric ships no CallLog provider, so a query-level test would
+     * only be asserting against a fake of our own making.
+     */
+    internal fun selectBest(entries: List<CallLogEntry>, callStartMillis: Long): CallLogMatch {
+        // minByOrNull keeps the first on a tie, and the query is ordered DATE DESC, so a
+        // tie resolves to the newer entry — the same behaviour as the older loop.
+        val best = entries.minByOrNull { abs(it.dateMillis - callStartMillis) }
+            ?: return CallLogMatch.NONE
+
+        return CallLogMatch(
+            number = normalize(best.number),
+            // A missed or unanswered call is logged with 0. Never report that as a call
+            // that lasted no time; it is a call whose length we do not know.
+            durationSeconds = best.durationSeconds.takeIf { it > 0 },
+        )
     }
 
     /** Digits only, preserving a leading '+'. Withheld/private numbers become null. */

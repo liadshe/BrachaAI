@@ -11,7 +11,9 @@ data class PendingUpload(
     val contactName: String,
     val date: String,
     val callerNumber: String?,
-    val transcript: String
+    val transcript: String,
+    /** Whole seconds, or null when neither the call log nor the recording could tell us. */
+    val callLengthSeconds: Int? = null
 )
 
 /**
@@ -46,6 +48,7 @@ class PendingUploadStore(private val dir: File) {
             put("date", upload.date)
             put("callerNumber", upload.callerNumber ?: JSONObject.NULL)
             put("transcript", upload.transcript)
+            put("callLengthSeconds", upload.callLengthSeconds ?: JSONObject.NULL)
         }
 
         val name = String.format("%013d-%03d.json", System.currentTimeMillis(), counter.getAndIncrement() % 1000)
@@ -85,11 +88,16 @@ class PendingUploadStore(private val dir: File) {
             try {
                 val json = JSONObject(file.readText())
                 val number = if (json.isNull("callerNumber")) null else json.getString("callerNumber")
+                // isNull() is true for a missing key as well as an explicit null, which is
+                // exactly what an entry queued before this field existed needs — anything
+                // stricter would quarantine it and strand its transcript.
+                val callLength = if (json.isNull("callLengthSeconds")) null else json.getInt("callLengthSeconds")
                 file to PendingUpload(
                     contactName = json.getString("contactName"),
                     date = json.getString("date"),
                     callerNumber = number,
-                    transcript = json.getString("transcript")
+                    transcript = json.getString("transcript"),
+                    callLengthSeconds = callLength
                 )
             } catch (e: Exception) {
                 quarantineUnlocked(file, e)

@@ -5,6 +5,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -151,5 +152,27 @@ class AudioProcessorUploadTest {
 
         assertEquals(AudioProcessor.UploadResult.Rejected, processorFor(store).uploadForTest(payload))
         assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun sendsTheCallLengthInTheUploadBody() {
+        val store = FakeTokenStore(accessToken = "good", refreshToken = "r1")
+        server.enqueue(MockResponse().setResponseCode(200))
+
+        processorFor(store).uploadForTest(payload.copy(callLengthSeconds = 272))
+
+        val body = JSONObject(server.takeRequest().body.readUtf8())
+        assertEquals(272, body.getInt("callLength"))
+    }
+
+    @Test
+    fun sendsAnExplicitNullCallLengthWhenTheDurationIsUnknown() {
+        val store = FakeTokenStore(accessToken = "good", refreshToken = "r1")
+        server.enqueue(MockResponse().setResponseCode(200))
+
+        processorFor(store).uploadForTest(payload.copy(callLengthSeconds = null))
+
+        val body = JSONObject(server.takeRequest().body.readUtf8())
+        assertTrue("callLength should be JSON null, not absent", body.isNull("callLength"))
     }
 }

@@ -74,8 +74,8 @@ class MainActivity : ComponentActivity() {
      *
      * - READ_CALL_LOG: caller-number lookup for recordings. Hard-restricted on API 29+ and
      *   can be denied instantly with no dialog. A denial is fully handled downstream —
-     *   CallerLookup.findNumberNear catches SecurityException and returns null, and the
-     *   backend accepts callerNumber: null.
+     *   CallerLookup.findNear catches SecurityException and returns CallLogMatch.NONE, and
+     *   the backend accepts callerNumber: null.
      * - READ_PHONE_STATE: the incoming-call briefing overlay. ACTION_PHONE_STATE_CHANGED is
      *   broadcast with READ_PHONE_STATE as a required receiver permission, so without the
      *   runtime grant PhoneStateReceiver.onReceive is simply never invoked and the overlay
