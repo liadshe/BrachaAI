@@ -1,4 +1,5 @@
 import { useCallback, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import apiClient from '../../services/apiClient';
 import BottomNav from '@/components/BottomNav';
 import SelectionBar from '@/components/SelectionBar';
@@ -15,6 +16,7 @@ const HomePage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const user = getStoredUser();
+    const navigate = useNavigate();
 
     const callSelection = useMultiSelect();
     const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -129,7 +131,7 @@ const HomePage: React.FC = () => {
                             </div>
                         ) : (
                             <div className={styles.statsGrid}>
-                                <div className={`${styles.statsCard} ${styles.blue}`}>
+                                <div className={`${styles.statsCard} ${styles.blue}`} onClick={() => navigate('/tasks')}>
                                     <div className={styles.statsIcon}>
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <polyline points="9 11 12 14 22 4" />
@@ -139,7 +141,7 @@ const HomePage: React.FC = () => {
                                     <span className={styles.statsNumber}>{stats.open}</span>
                                     <span className={styles.statsLabel}>Open Tasks</span>
                                 </div>
-                                <div className={`${styles.statsCard} ${styles.red}`}>
+                                <div className={`${styles.statsCard} ${styles.red}`} onClick={() => navigate('/tasks?filter=Overdue')}>
                                     <div className={styles.statsIcon}>
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <circle cx="12" cy="12" r="10" />
@@ -150,7 +152,7 @@ const HomePage: React.FC = () => {
                                     <span className={styles.statsNumber}>{stats.overdue}</span>
                                     <span className={styles.statsLabel}>Overdue</span>
                                 </div>
-                                <div className={`${styles.statsCard} ${styles.green}`}>
+                                <div className={`${styles.statsCard} ${styles.green}`} onClick={() => navigate('/tasks?filter=Done')}>
                                     <div className={styles.statsIcon}>
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <polyline points="20 6 9 17 4 12" />
