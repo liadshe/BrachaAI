@@ -44,11 +44,17 @@ class AudioDuration {
                 null
             } else {
                 // millis + 500 can overflow a Long back into negative territory on
-                // corrupt-container metadata near Long.MAX_VALUE, and the overflowed
-                // value would then truncate silently through .toInt(). Check the
-                // converted result, not just the raw millis, so a bogus duration
-                // still comes out as "unknown" rather than a negative Int.
-                (((millis + 500) / 1000).toInt()).takeIf { it > 0 }
+                // corrupt-container metadata near Long.MAX_VALUE. Range-check the
+                // computed seconds as a Long, before truncating to Int: an overflowed
+                // negative Long keeps only its low 32 bits through .toInt(), which does
+                // not reliably land negative (e.g. Long.MAX_VALUE here truncates to a
+                // positive ~1.5 billion), so checking the Int would let a bogus
+                // duration through as a huge-but-plausible-looking call length. Checking
+                // the Long instead — and rejecting anything above Int.MAX_VALUE too, not
+                // just anything <= 0 — means a bogus duration still comes out as
+                // "unknown" rather than a corrupted-but-live seconds value.
+                val seconds = (millis + 500) / 1000
+                seconds.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt()
             }
         } catch (e: Exception) {
             Log.w(TAG, "Could not read duration from ${file.name}", e)

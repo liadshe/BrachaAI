@@ -132,6 +132,11 @@
 
 .clientInfo {
     flex: 1;
+    /* A flex item's default min-width is `auto`, which refuses to shrink below its
+       content's natural width — that's what silently defeats text-overflow/ellipsis
+       on .clientName below. min-width: 0 lets this column actually shrink so the name
+       can truncate instead of wrapping and growing the card. */
+    min-width: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -149,6 +154,11 @@
     font-weight: 600;
     color: #0f172a;
     margin: 0;
+    /* Truncate a long name to one line with an ellipsis instead of wrapping and
+       growing the card, so the task badge next to it keeps a stable position. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .taskBadge {

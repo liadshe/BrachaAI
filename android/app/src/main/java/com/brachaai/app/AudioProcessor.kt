@@ -108,8 +108,9 @@ class AudioProcessor(
                 // The call log is the truth about the call; the recording is only the
                 // truth about the file. Prefer the former, fall back to the latter, and
                 // accept "unknown" over blocking an upload. Measured off the original
-                // recording, which still exists here — deleteOriginalIfEnabled runs much
-                // later, and the converted MP3 is gone on the conversion-failure path.
+                // recording rather than the converted MP3: the original is the
+                // authoritative artifact, and it is still guaranteed to exist here —
+                // deleteOriginalIfEnabled does not run until much later, well after this.
                 val callLengthSeconds = callLogMatch.durationSeconds
                     ?: audioDuration.secondsOf(audioFile)
                 println("8b. Call length: ${callLengthSeconds?.let { "${it}s" } ?: "unknown"}")
