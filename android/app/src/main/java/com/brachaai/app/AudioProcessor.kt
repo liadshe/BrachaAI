@@ -1,5 +1,6 @@
 package com.brachaai.app
 
+import android.media.MediaMetadataRetriever
 import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
@@ -60,6 +61,26 @@ class AudioProcessor(
 
     suspend fun processAndSendToBackend(audioFile: File) {
         withContext(Dispatchers.IO) {
+            // Check duration: skip files shorter than 5 seconds
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(audioFile.absolutePath)
+                val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                val durationMs = durationStr?.toLongOrNull() ?: 0L
+                if (durationMs in 1..4999) {
+                    println("Skipping ${audioFile.name}: duration too short ($durationMs ms)")
+
+                    // Delete the short file before exiting so it doesn't stay on the device forever
+                    deleteOriginalIfEnabled(audioFile)
+
+                    return@withContext
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Duration check failed for ${audioFile.name}, proceeding anyway", e)
+            } finally {
+                try { retriever.release() } catch (e: Exception) {}
+            }
+
             // Held outside the try so the finally can always clean it up. Previously the
             // delete sat on the happy path only, so any throw below leaked the MP3 in
             // cacheDir permanently.
@@ -99,7 +120,11 @@ class AudioProcessor(
                     throw IllegalStateException("Transcript came back blank for ${audioFile.name}; not uploaded")
                 }
 
-                val callerNumber = parsedInfo.toEpochMillis()?.let { callerLookup.findNumberNear(it) }
+                // FIX APPLIED HERE: Explicitly casting and typing the parameter to resolve the inference error.
+                val epochMillis = parsedInfo.toEpochMillis() as? Long
+                val callerNumber = epochMillis?.let { timestamp: Long ->
+                    callerLookup.findNumberNear(timestamp)
+                }
                 println("8. Caller number: ${callerNumber ?: "unavailable"}")
 
                 val payload = PendingUpload(
