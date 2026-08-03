@@ -124,7 +124,8 @@ class AudioProcessor(
                 val callLogMatch = parsedInfo.toEpochMillis()?.let { callerLookup.findNear(it) }
                     ?: CallLogMatch.NONE
                 val callerNumber = callLogMatch.number
-                println("8. Caller number: ${callerNumber ?: "unavailable"}")
+                val callType = callLogMatch.callType ?: "incoming"
+                println("8. Caller number: ${callerNumber ?: "unavailable"}, type: $callType")
 
                 // The call log is the truth about the call; the recording is only the
                 // truth about the file. Prefer the former, fall back to the latter, and
@@ -141,7 +142,8 @@ class AudioProcessor(
                     date = "${parsedInfo.date}_${parsedInfo.time}",
                     callerNumber = callerNumber,
                     transcript = correctedTranscript,
-                    callLengthSeconds = callLengthSeconds
+                    callLengthSeconds = callLengthSeconds,
+                    callType = callType
                 )
 
                 println("9. Sending data to backend...")
@@ -360,6 +362,7 @@ class AudioProcessor(
                 put("transcript", payload.transcript)
                 put("callerNumber", payload.callerNumber ?: JSONObject.NULL)
                 put("callLength", payload.callLengthSeconds ?: JSONObject.NULL)
+                put("callType", payload.callType ?: "incoming")
             }
 
             val request = Request.Builder()

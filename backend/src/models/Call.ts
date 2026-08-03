@@ -5,6 +5,11 @@ const CallSchema = new Schema({
     contactId: { type: Schema.Types.ObjectId, ref: 'Contact', required: true },
     fullTranscript: { type: String, required: true },
     callSummary: { type: String },
+    callType: {
+        type: String,
+        enum: ['incoming', 'outgoing', 'missed'],
+        default: 'incoming',
+    },
     analysisStatus: {
         type: String,
         enum: ['pending', 'done', 'failed'],
