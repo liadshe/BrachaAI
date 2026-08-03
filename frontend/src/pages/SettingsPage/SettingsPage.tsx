@@ -165,29 +165,6 @@ const SettingsPage: React.FC = () => {
                     </div>
                 </section>
 
-                {/* Privacy & Security Section */}
-                <section className={styles.settingsSection}>
-                    <h3 className={styles.sectionTitle}>Privacy & Security</h3>
-                    <div className={styles.settingsCard}>
-                        <button className={styles.menuItem}>
-                            <div className={styles.settingInfo}>
-                                <div className={`${styles.iconBox} ${styles.purpleIcon}`}>
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
-                                    </svg>
-                                </div>
-                                <div className={styles.settingText}>
-                                    <span className={styles.settingName}>Privacy & Permissions</span>
-                                    <span className={styles.settingDescription}>Manage app permissions</span>
-                                </div>
-                            </div>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="9 18 15 12 9 6" />
-                            </svg>
-                        </button>
-                    </div>
-                </section>
-
                 {/* Account Section */}
                 <section className={styles.settingsSection}>
                     <h3 className={styles.sectionTitle}>Account</h3>
