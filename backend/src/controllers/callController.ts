@@ -71,7 +71,7 @@ export const handleIncomingAndroidCall = async (
       return res.status(400).json({ success: false, message: 'transcript is required' });
     }
 
-    console.log(`[DEBUG] Android call webhook for userId: ${userId}, callType: ${callType || 'incoming'}`);
+    console.log(`[DEBUG] Android call webhook for userId: ${userId}, callType: ${callType ?? 'unknown'}`);
 
     const actualCallDate = parseFilenameDate(date);
     const contact = await userService.getOrCreateContact(userId, contactName, callerNumber ?? null);
@@ -81,7 +81,9 @@ export const handleIncomingAndroidCall = async (
       transcript,
       actualCallDate,
       parseCallLength(callLength),
-      callType || 'incoming'
+      // Passed through as-is, including undefined. saveRawCall is the single place that
+      // decides what counts as a known direction.
+      callType
     );
 
     const businessDescription = req.user?.businessDescription || '';

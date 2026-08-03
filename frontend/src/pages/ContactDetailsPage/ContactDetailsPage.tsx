@@ -228,6 +228,21 @@ const ContactDetailsPage: React.FC = () => {
         return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
+    /**
+     * A plain "Call" for a direction the device could not determine. The old ternary fell
+     * through to 'Incoming Call' for anything that wasn't outgoing or missed, so every call
+     * with no direction — which was all of them whenever the call log was unreadable —
+     * claimed to be incoming.
+     */
+    const formatCallType = (callType?: Call['callType']) => {
+        switch (callType) {
+            case 'outgoing': return 'Outgoing Call';
+            case 'incoming': return 'Incoming Call';
+            case 'missed': return 'Missed Call';
+            default: return 'Call';
+        }
+    };
+
     const formatDateDisplay = (dateString?: string) => {
         if (!dateString) return 'No due date';
         try {
@@ -382,7 +397,7 @@ const ContactDetailsPage: React.FC = () => {
                                                 </div>
                                                 <div className={styles.callMeta}>
                                                     <h3 className={styles.callTitle}>
-                                                        {call.callType === 'outgoing' ? 'Outgoing Call' : call.callType === 'missed' ? 'Missed Call' : 'Incoming Call'}
+                                                        {formatCallType(call.callType)}
                                                     </h3>
                                                     <p className={styles.callTime}>{formatTime(call.callDateTime)}{formatDuration(call.callLength) ? ` • ${formatDuration(call.callLength)}` : ''}</p>
                                                 </div>

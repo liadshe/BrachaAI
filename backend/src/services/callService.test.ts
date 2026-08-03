@@ -70,3 +70,34 @@ describe('saveRawCall call length', () => {
         expect(vi.mocked(Call.create).mock.calls[0][0]).not.toHaveProperty('callLength');
     });
 });
+
+describe('saveRawCall call direction', () => {
+    const DATE = new Date('2026-08-02T10:15:00Z');
+
+    beforeEach(() => {
+        vi.mocked(Call.create).mockReset();
+        vi.mocked(Call.create).mockResolvedValue({ id: 'call-1' } as any);
+    });
+
+    const savedWith = () => vi.mocked(Call.create).mock.calls[0][0];
+
+    it.each(['incoming', 'outgoing', 'missed'])('stores %s as given', async (direction) => {
+        await saveRawCall(USER_ID, CONTACT_ID, 'shalom', DATE, 272, direction);
+
+        expect(savedWith()).toMatchObject({ callType: direction });
+    });
+
+    it('omits the field entirely when the device could not determine a direction', async () => {
+        await saveRawCall(USER_ID, CONTACT_ID, 'shalom', DATE, 272, undefined);
+
+        // The regression this guards: defaulting an unknown direction to 'incoming' made
+        // every outgoing call display as an incoming one.
+        expect(savedWith()).not.toHaveProperty('callType');
+    });
+
+    it('omits the field rather than coercing an unrecognised direction', async () => {
+        await saveRawCall(USER_ID, CONTACT_ID, 'shalom', DATE, 272, 'sideways');
+
+        expect(savedWith()).not.toHaveProperty('callType');
+    });
+});
