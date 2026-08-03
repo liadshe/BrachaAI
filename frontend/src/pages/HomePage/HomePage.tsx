@@ -8,6 +8,7 @@ import { useMultiSelect } from '@/hooks/useMultiSelect';
 import { useSelectionBackButton } from '@/hooks/useSelectionBackButton';
 import { useCallDeletion } from '@/hooks/useCallDeletion';
 import { getStoredUser } from '@/services/authTokens';
+import { formatDuration } from '@/utils/formatDuration';
 import styles from './HomePage.module.css';
 
 const HomePage: React.FC = () => {
@@ -199,6 +200,7 @@ const HomePage: React.FC = () => {
                                             </div>
                                             <span className={styles.callTime}>
                                                 {call.callDateTime ? new Date(call.callDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                {formatDuration(call.callLength) ? ` • ${formatDuration(call.callLength)}` : ''}
                                             </span>
                                         </div>
                                         <p className={styles.insightSummary}>
