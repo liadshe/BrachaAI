@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getOrCreateContact = exports.PLACEHOLDER_PHONE = void 0;
 const Contact_1 = __importDefault(require("../models/Contact"));
+const contactName_1 = require("../utils/contactName");
 exports.PLACEHOLDER_PHONE = '000-000-000';
 /** Digits only, preserving a leading '+'. Returns null for unusable input. */
 const normalizePhone = (raw) => {
@@ -15,7 +16,11 @@ const normalizePhone = (raw) => {
     const digits = trimmed.replace(/\D/g, '');
     return digits ? prefix + digits : null;
 };
-const getOrCreateContact = async (userId, contactName, callerNumber = null) => {
+const getOrCreateContact = async (userId, rawContactName, callerNumber = null) => {
+    // The name arrives from the recording's filename, which carries the recorder's
+    // "Call " label. Stripped here as well as in the client's parser so older installs
+    // and queued uploads stop creating "Call Mom" alongside "Mom".
+    const contactName = (0, contactName_1.stripCallPrefix)(rawContactName);
     const phone = normalizePhone(callerNumber);
     // Phone is the strongest identifier — prefer it over the recorded name.
     if (phone) {
