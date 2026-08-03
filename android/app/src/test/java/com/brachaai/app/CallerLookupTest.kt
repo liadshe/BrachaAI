@@ -1,6 +1,7 @@
 package com.brachaai.app
 
 import android.content.Context
+import android.provider.CallLog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -87,5 +88,40 @@ class CallerLookupTest {
 
         assertNull(match.number)
         assertEquals(60, match.durationSeconds)
+    }
+
+    // --- direction ---
+
+    private fun directionOf(rawType: Int): String? =
+        lookup.selectBest(listOf(CallLogEntry("0501234567", start, 60, rawType)), start).callType
+
+    @Test
+    fun readsTheDirectionOfTheWinningEntry() {
+        assertEquals(CallDirections.INCOMING, directionOf(CallLog.Calls.INCOMING_TYPE))
+        assertEquals(CallDirections.OUTGOING, directionOf(CallLog.Calls.OUTGOING_TYPE))
+        assertEquals(CallDirections.MISSED, directionOf(CallLog.Calls.MISSED_TYPE))
+    }
+
+    @Test
+    fun countsEveryInboundFlavourAsIncoming() {
+        // Voicemail, rejected, blocked and answered-elsewhere are all calls that came *to*
+        // the user. They are named explicitly so the else branch can mean "unrecognised".
+        assertEquals(CallDirections.INCOMING, directionOf(CallLog.Calls.VOICEMAIL_TYPE))
+        assertEquals(CallDirections.INCOMING, directionOf(CallLog.Calls.REJECTED_TYPE))
+        assertEquals(CallDirections.INCOMING, directionOf(CallLog.Calls.BLOCKED_TYPE))
+        assertEquals(CallDirections.INCOMING, directionOf(CallLog.Calls.ANSWERED_EXTERNALLY_TYPE))
+    }
+
+    @Test
+    fun reportsAnUnrecognisedTypeAsUnknownRatherThanIncoming() {
+        // A future Android call type must not be silently labelled incoming — that is the
+        // failure mode this whole change exists to remove.
+        assertNull(directionOf(99))
+    }
+
+    @Test
+    fun reportsNoDirectionWhenTheCallLogIsUnavailable() {
+        assertNull(CallLogMatch.NONE.callType)
+        assertNull(lookup.selectBest(emptyList(), start).callType)
     }
 }

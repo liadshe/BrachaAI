@@ -49,7 +49,10 @@ class CallMonitorService : Service() {
             pendingStore = PendingUploadStore(File(filesDir, "pending")),
             callerLookup = CallerLookup(this),
             settingsStore = SettingsStore(this),
-            tokenRefresher = tokenRefresher
+            tokenRefresher = tokenRefresher,
+            // Same store PhoneStateReceiver writes to; it is a thin wrapper over
+            // SharedPreferences, so a second instance here shares the same underlying data.
+            callDirectionStore = CallDirectionStore(this)
         )
         briefingSync = BriefingSync(
             client = BriefingClient(authStore, tokenRefresher),

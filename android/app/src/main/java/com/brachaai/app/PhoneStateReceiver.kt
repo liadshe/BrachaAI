@@ -22,12 +22,30 @@ class PhoneStateReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != TelephonyManager.ACTION_PHONE_STATE_CHANGED) return
 
-        when (intent.getStringExtra(TelephonyManager.EXTRA_STATE)) {
+        val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
+
+        // Recorded for *every* state, including the OFFHOOK the overlay ignores: telling an
+        // outgoing call from an answered incoming one is precisely the RINGING-then-OFFHOOK
+        // distinction, so the store has to see the whole sequence to read it. This is the
+        // only source of call direction that survives READ_CALL_LOG being denied. It writes
+        // two small SharedPreferences keys and never touches the overlay below.
+        recordDirection(context, state)
+
+        when (state) {
             TelephonyManager.EXTRA_STATE_RINGING -> onRinging(context, intent)
 
             // The card is meant to persist through the answered call, so OFFHOOK is
-            // deliberately not handled. IDLE is the only thing that ends it.
+            // deliberately not rendered. IDLE is the only thing that ends it.
             TelephonyManager.EXTRA_STATE_IDLE -> dismiss(context)
+        }
+    }
+
+    /** Never allowed to break the overlay: a failed write costs one call's direction. */
+    private fun recordDirection(context: Context, state: String?) {
+        try {
+            CallDirectionStore(context).onPhoneState(state, System.currentTimeMillis())
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not record call direction for state $state", e)
         }
     }
 

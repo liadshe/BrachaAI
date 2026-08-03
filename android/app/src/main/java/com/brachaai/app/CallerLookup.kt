@@ -93,11 +93,20 @@ class CallerLookup(context: Context) {
         val best = entries.minByOrNull { abs(it.dateMillis - callStartMillis) }
             ?: return CallLogMatch.NONE
 
+        // Every inbound flavour is named explicitly rather than swept into a catch-all, so
+        // the `else` can mean what it says: a type this version of Android has that we do
+        // not recognise. That returns null — "we do not know" — instead of asserting
+        // "incoming", which is how an unreadable direction used to become a confident and
+        // wrong label on every call in the app.
         val typeStr = when (best.rawType) {
-            CallLog.Calls.INCOMING_TYPE -> "incoming"
-            CallLog.Calls.OUTGOING_TYPE -> "outgoing"
-            CallLog.Calls.MISSED_TYPE -> "missed"
-            else -> "incoming"
+            CallLog.Calls.OUTGOING_TYPE -> CallDirections.OUTGOING
+            CallLog.Calls.MISSED_TYPE -> CallDirections.MISSED
+            CallLog.Calls.INCOMING_TYPE,
+            CallLog.Calls.VOICEMAIL_TYPE,
+            CallLog.Calls.REJECTED_TYPE,
+            CallLog.Calls.BLOCKED_TYPE,
+            CallLog.Calls.ANSWERED_EXTERNALLY_TYPE -> CallDirections.INCOMING
+            else -> null
         }
 
         return CallLogMatch(

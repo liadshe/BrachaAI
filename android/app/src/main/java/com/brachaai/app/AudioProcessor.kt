@@ -25,7 +25,14 @@ class AudioProcessor(
     private val settingsStore: SettingsStore,
     private val tokenRefresher: TokenRefresher,
     private val baseUrl: String = BackendConfig.BASE_URL,
-    private val audioDuration: AudioDuration = AudioDuration()
+    private val audioDuration: AudioDuration = AudioDuration(),
+    /**
+     * Fallback source of call direction when the call log is unreadable. Nullable and
+     * defaulted so the existing construction sites and tests that never cared about
+     * direction keep compiling; a null store simply means the fallback is unavailable and
+     * the direction stays unknown, which is now a value the whole stack can carry.
+     */
+    private val callDirectionStore: CallDirectionStore? = null
 ) {
 
     private val whisperClient = WhisperApiClient(openAiApiKey)
@@ -121,11 +128,20 @@ class AudioProcessor(
                     throw IllegalStateException("Transcript came back blank for ${audioFile.name}; not uploaded")
                 }
 
-                val callLogMatch = parsedInfo.toEpochMillis()?.let { callerLookup.findNear(it) }
+                val callStartMillis = parsedInfo.toEpochMillis()
+                val callLogMatch = callStartMillis?.let { callerLookup.findNear(it) }
                     ?: CallLogMatch.NONE
                 val callerNumber = callLogMatch.number
-                val callType = callLogMatch.callType ?: "incoming"
-                println("8. Caller number: ${callerNumber ?: "unavailable"}, type: $callType")
+
+                // Two sources, in order of authority. The call log is the platform's own
+                // record of the call, so it wins whenever it is readable; CallDirectionStore
+                // is the fallback for the case that made every call look incoming —
+                // READ_CALL_LOG denied, so the log says nothing at all. When neither knows,
+                // this stays null the whole way to the UI. Inventing "incoming" here is
+                // exactly the bug: an unknown direction was rendered as a definite one.
+                val callType = callLogMatch.callType
+                    ?: callStartMillis?.let { callDirectionStore?.directionNear(it) }
+                println("8. Caller number: ${callerNumber ?: "unavailable"}, type: ${callType ?: "unknown"}")
 
                 // The call log is the truth about the call; the recording is only the
                 // truth about the file. Prefer the former, fall back to the latter, and
@@ -362,7 +378,10 @@ class AudioProcessor(
                 put("transcript", payload.transcript)
                 put("callerNumber", payload.callerNumber ?: JSONObject.NULL)
                 put("callLength", payload.callLengthSeconds ?: JSONObject.NULL)
-                put("callType", payload.callType ?: "incoming")
+                // JSON null, not "incoming": the backend leaves the field unset for a null
+                // and the UI renders a neutral "Call", so an unknown direction stays
+                // unknown instead of being asserted as inbound.
+                put("callType", payload.callType ?: JSONObject.NULL)
             }
 
             val request = Request.Builder()

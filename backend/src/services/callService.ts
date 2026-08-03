@@ -7,8 +7,15 @@ export const saveRawCall = async (
     transcript: string,
     callDate: Date,
     callLengthSeconds?: number,
-    callType: string = 'incoming'
+    callType?: string
 ) => {
+    // Same reasoning as callLength below: an unrecognised or absent direction leaves the
+    // field unset rather than being coerced to 'incoming'. Coercing is what turned "the
+    // device never told us" into a confident — and for outgoing calls, wrong — label.
+    const knownDirection = ['incoming', 'outgoing', 'missed'].includes(callType ?? '')
+        ? callType
+        : undefined;
+
     return await Call.create({
         userId,
         contactId,
@@ -17,7 +24,7 @@ export const saveRawCall = async (
         // Spread rather than assigned: an unknown duration must leave the field unset, not
         // store an explicit null that later reads as a measured zero.
         ...(callLengthSeconds === undefined ? {} : { callLength: callLengthSeconds }),
-        callType: ['incoming', 'outgoing', 'missed'].includes(callType) ? callType : 'incoming',
+        ...(knownDirection === undefined ? {} : { callType: knownDirection }),
     });
 };
 
