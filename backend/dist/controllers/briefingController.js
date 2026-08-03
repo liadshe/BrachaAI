@@ -32,61 +32,44 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteContact = exports.getContactById = exports.getContacts = void 0;
-const Contact_1 = __importDefault(require("../models/Contact"));
-const contactService = __importStar(require("../services/contactService"));
+exports.getBriefingByContactId = exports.getBriefings = void 0;
+const briefingService = __importStar(require("../services/briefingService"));
 const objectId_1 = require("../utils/objectId");
-const getContacts = async (req, res) => {
-    try {
-        const userId = req.user?.id;
-        const contacts = await contactService.getContactsWithOpenTaskCounts(userId);
-        res.status(200).json(contacts);
-    }
-    catch (error) {
-        console.error('Get contacts error:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-};
-exports.getContacts = getContacts;
-const getContactById = async (req, res) => {
-    try {
-        const userId = req.user?.id;
-        const contactId = req.params.id;
-        const contact = await Contact_1.default.findOne({ _id: contactId, userId });
-        if (!contact) {
-            return res.status(404).json({ message: 'Contact not found' });
-        }
-        res.status(200).json(contact);
-    }
-    catch (error) {
-        console.error('Get contact by id error:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-};
-exports.getContactById = getContactById;
-const deleteContact = async (req, res) => {
+const getBriefings = async (req, res) => {
     try {
         const userId = req.user?.id;
         if (!userId) {
             return res.status(401).json({ message: 'Unauthenticated' });
         }
-        const contactId = req.params.id;
-        if (!(0, objectId_1.isObjectId)(contactId)) {
-            return res.status(400).json({ message: 'invalid contact id' });
-        }
-        const result = await contactService.deleteContactCascade(userId, contactId);
-        if (!result) {
-            return res.status(404).json({ message: 'Contact not found' });
-        }
-        res.status(200).json(result);
+        const briefings = await briefingService.getBriefings(userId);
+        res.status(200).json(briefings);
     }
     catch (error) {
-        console.error('Delete contact error:', error);
+        console.error('Get briefings error:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 };
-exports.deleteContact = deleteContact;
+exports.getBriefings = getBriefings;
+const getBriefingByContactId = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ message: 'Unauthenticated' });
+        }
+        const contactId = req.params.contactId;
+        if (!(0, objectId_1.isObjectId)(contactId)) {
+            return res.status(400).json({ message: 'invalid contact id' });
+        }
+        const briefing = await briefingService.getBriefing(userId, contactId);
+        if (!briefing) {
+            return res.status(404).json({ message: 'Contact not found' });
+        }
+        res.status(200).json(briefing);
+    }
+    catch (error) {
+        console.error('Get briefing error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+exports.getBriefingByContactId = getBriefingByContactId;

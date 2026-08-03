@@ -34,19 +34,21 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
-const UserSchema = new mongoose_1.Schema({
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
-    phoneNumber: { type: String, required: true, unique: true },
-    password: { type: String }, // Optional for now if using other auth methods later
-    profilePicture: { type: String },
-    businessDescription: { type: String, default: '' },
-    settings: {
-        autoCallRecording: { type: Boolean, default: false }
-    },
-    permissions: {
-        microphone: { type: Boolean, default: false },
-        contacts: { type: Boolean, default: false },
-    }
+const RefreshTokenSchema = new mongoose_1.Schema({
+    userId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
+    tokenHash: { type: String, required: true },
+    client: { type: String, required: true, enum: ['web', 'native'] },
+    expiresAt: { type: Date, required: true },
+    createdAt: { type: Date, default: Date.now },
 });
-exports.default = mongoose_1.default.model('User', UserSchema);
+/**
+ * One row per (user, client). This is what makes rotation safe with two clients:
+ * a web refresh upserts only the web row and cannot invalidate native's, so the
+ * background uploader and the WebView never race each other into a spurious logout.
+ */
+RefreshTokenSchema.index({ userId: 1, client: 1 }, { unique: true });
+/** Lookup path for the refresh endpoint. */
+RefreshTokenSchema.index({ tokenHash: 1 });
+/** Mongo reaps expired rows on its own; nothing in app code sweeps this collection. */
+RefreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+exports.default = mongoose_1.default.model('RefreshToken', RefreshTokenSchema);

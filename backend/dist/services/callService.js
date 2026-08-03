@@ -5,12 +5,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteCallsByIds = exports.markAnalysisFailed = exports.updateCallWithAnalysis = exports.saveRawCall = void 0;
 const Call_1 = __importDefault(require("../models/Call"));
-const saveRawCall = async (userId, contactId, transcript, callDate) => {
+const saveRawCall = async (userId, contactId, transcript, callDate, callLengthSeconds) => {
     return await Call_1.default.create({
         userId,
         contactId,
         fullTranscript: transcript,
         callDateTime: callDate,
+        // Spread rather than assigned: an unknown duration must leave the field unset, not
+        // store an explicit null that later reads as a measured zero.
+        ...(callLengthSeconds === undefined ? {} : { callLength: callLengthSeconds }),
     });
 };
 exports.saveRawCall = saveRawCall;

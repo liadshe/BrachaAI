@@ -62,6 +62,19 @@ const parseFilenameDate = (dateString) => {
         return new Date();
     }
 };
+/**
+ * Whole seconds, or undefined for anything we will not stand behind.
+ *
+ * Deliberately never an error. `AudioProcessor.NON_RETRYABLE_CODES` treats a 400 as
+ * permanent — the client drops the payload and never retries it — so rejecting a call
+ * over a malformed duration would destroy the transcript to protect an integer.
+ */
+const parseCallLength = (raw) => {
+    if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) {
+        return undefined;
+    }
+    return Math.round(raw);
+};
 const getCalls = async (req, res) => {
     try {
         const userId = req.user?.id;
@@ -82,18 +95,19 @@ const handleIncomingAndroidCall = async (req, res) => {
         if (!userId) {
             return res.status(401).json({ success: false, message: 'Unauthenticated' });
         }
-        const { contactName, date, transcript, callerNumber } = req.body;
+        const { contactName, date, transcript, callerNumber, callLength } = req.body;
         if (!transcript) {
             return res.status(400).json({ success: false, message: 'transcript is required' });
         }
         console.log(`[DEBUG] Android call webhook for userId: ${userId}`);
         const actualCallDate = parseFilenameDate(date);
         const contact = await userService.getOrCreateContact(userId, contactName, callerNumber ?? null);
-        const call = await callService.saveRawCall(userId, contact.id, transcript, actualCallDate);
+        const call = await callService.saveRawCall(userId, contact.id, transcript, actualCallDate, parseCallLength(callLength));
+        const businessDescription = req.user?.businessDescription || '';
         // Respond as soon as the call is durable. Analysis is slow and may fail;
         // making the client wait on it would turn AI errors into duplicate uploads.
         res.status(201).json({ success: true, callId: call.id, analysisStatus: 'pending' });
-        void runAnalysis(call.id, userId, contact.id, transcript);
+        void runAnalysis(call.id, userId, contact.id, transcript, businessDescription);
     }
     catch (error) {
         console.error("Controller Error:", error);
@@ -102,9 +116,9 @@ const handleIncomingAndroidCall = async (req, res) => {
     }
 };
 exports.handleIncomingAndroidCall = handleIncomingAndroidCall;
-const runAnalysis = async (callId, userId, contactId, transcript) => {
+const runAnalysis = async (callId, userId, contactId, transcript, businessDescription) => {
     try {
-        const analysis = await aiService.analyzeTranscript(transcript);
+        const analysis = await aiService.analyzeTranscript(transcript, businessDescription);
         await callService.updateCallWithAnalysis(callId, analysis.summary);
         console.log(`Processed: ${analysis.summary}`);
         if (analysis?.tasks &&

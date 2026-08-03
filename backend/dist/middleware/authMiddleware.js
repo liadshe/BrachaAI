@@ -14,7 +14,14 @@ const protect = (req, res, next) => {
     const token = authHeader.split(' ')[1];
     try {
         const decoded = jsonwebtoken_1.default.verify(token, jwt_1.JWT_SECRET);
-        req.user = { id: decoded.id };
+        req.user = {
+            id: decoded.id,
+            name: decoded.name,
+            email: decoded.email,
+            phoneNumber: decoded.phoneNumber,
+            profilePicture: decoded.profilePicture,
+            businessDescription: decoded.businessDescription,
+        };
         next();
     }
     catch (error) {

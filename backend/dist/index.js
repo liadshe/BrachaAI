@@ -11,6 +11,7 @@ const callRoute_1 = __importDefault(require("./routes/callRoute"));
 const authRoute_1 = __importDefault(require("./routes/authRoute"));
 const taskRoute_1 = __importDefault(require("./routes/taskRoute"));
 const contactRoute_1 = __importDefault(require("./routes/contactRoute"));
+const briefingRoute_1 = __importDefault(require("./routes/briefingRoute"));
 // 1. Load the secrets from your .env file
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -35,6 +36,7 @@ app.use('/api', callRoute_1.default);
 app.use('/api/auth', authRoute_1.default);
 app.use('/api', taskRoute_1.default);
 app.use('/api', contactRoute_1.default);
+app.use('/api', briefingRoute_1.default);
 // 5. Start the engine
 app.listen(PORT, () => {
     console.log(`🚀 Bracha AI Backend is live at http://localhost:${PORT}`);
