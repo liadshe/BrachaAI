@@ -177,11 +177,29 @@ class CallMonitorService : Service() {
                 // reboots would strand every recording. The backstop exists for a phone that
                 // has been sitting on one network for hours, so it loses nothing by waiting
                 // for the first tick.
-                runGuarded("Periodic sweep of pending recordings") { pendingAudioQueue.sweep() }
-                // Same reason as the drain after sweepPendingAudio: outside the sweep so a
-                // sweep failure cannot skip it, and after sweep() returns so the queue's
-                // mutex is not held for the length of a 200-entry drain.
-                runGuarded("Queue drain after the periodic sweep") { audioProcessor.flushPending() }
+                //
+                // Gated on connectivity, unlike the other two triggers. This one fires on a
+                // timer with no evidence behind it, so offline it would burn one of every
+                // pending recording's five attempts per tick: a phone offline for ~30 hours
+                // sees five ticks and marks the lot `stuck` — kept and notified, but never
+                // retried again. A long flight or a weekend without signal reaches that, and
+                // it is the exact stranding this queue exists to prevent.
+                //
+                // UNKNOWN sweeps anyway — see shouldSweepOnConnection. The other two triggers
+                // are deliberately not gated: NetworkWatcher's callback already fires only on
+                // a validated network, and handleNewFile's sweep is already gated on Completed.
+                val connection = networkWatcher?.connectionState() ?: ConnectionState.UNKNOWN
+                if (shouldSweepOnConnection(connection)) {
+                    runGuarded("Periodic sweep of pending recordings") { pendingAudioQueue.sweep() }
+                    // Same reason as the drain after sweepPendingAudio: outside the sweep so a
+                    // sweep failure cannot skip it, and after sweep() returns so the queue's
+                    // mutex is not held for the length of a 200-entry drain. Inside the same
+                    // gate because it exists to deliver what that sweep produced, and draining
+                    // with no network only fails every entry.
+                    runGuarded("Queue drain after the periodic sweep") { audioProcessor.flushPending() }
+                } else {
+                    Log.d(TAG, "Skipping the periodic sweep: no usable connection ($connection)")
+                }
             }
         }
     }
@@ -257,7 +275,10 @@ class CallMonitorService : Service() {
                     // post a bogus "Failed to process" notification for it.
                     runGuarded("Queue drain after a successful upload") { audioProcessor.flushPending() }
                     // The call that just uploaded produces a new summary and new tasks.
-                    briefingSync.syncNow()
+                    // Guarded like the drain above: this call already landed and was uploaded,
+                    // so a failed briefing fetch must not fall through to the catch below and
+                    // post a "Failed to process" notification for a call that did not fail.
+                    runGuarded("Briefing sync after a successful upload") { briefingSync.syncNow() }
                     sweepPendingAudio()
                 }
             } catch (e: CancellationException) {

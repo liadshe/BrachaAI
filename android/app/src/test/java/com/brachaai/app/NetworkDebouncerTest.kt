@@ -51,4 +51,31 @@ class NetworkDebouncerTest {
 
         assertTrue(debouncer.accept(500L))
     }
+
+    // ---------------------------------------------------- shouldSweepOnConnection
+    //
+    // The gate on CallMonitorService's 6-hour backstop sweep. Also pure — the Android query
+    // that produces the ConnectionState lives in NetworkWatcher.connectionState().
+
+    @Test
+    fun aValidatedConnectionSweeps() {
+        assertTrue(shouldSweepOnConnection(ConnectionState.VALIDATED))
+    }
+
+    @Test
+    fun noUsableConnectionSkipsTheSweep() {
+        // The regression this exists for: the periodic sweep ran regardless of connectivity,
+        // so ~30 hours offline gave five ticks, burned all five attempts on every pending
+        // recording with no network ever present, and marked the lot stuck — kept and
+        // notified, but never retried again.
+        assertFalse(shouldSweepOnConnection(ConnectionState.UNVALIDATED))
+    }
+
+    @Test
+    fun anUnknownConnectionSweepsAnyway() {
+        // An undeterminable state must not silently disable the only backstop there is.
+        // Burning one attempt is recoverable — the recording survives and four attempts
+        // remain — whereas never retrying at all is not.
+        assertTrue(shouldSweepOnConnection(ConnectionState.UNKNOWN))
+    }
 }
