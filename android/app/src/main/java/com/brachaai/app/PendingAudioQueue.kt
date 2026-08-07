@@ -21,7 +21,13 @@ class PendingAudioQueue(
     private val watchDir: File,
     private val index: RecordingIndex,
     private val processor: RecordingProcessor,
-    /** Called once, at the moment a recording is given up on. Name, then reason. */
+    /**
+     * Called once, at the moment a recording is given up on. Name, then reason.
+     *
+     * Invoked while the queue's internal lock is held, so it must never call back into
+     * [processNow] or [sweep] — [Mutex] is not reentrant, and a re-entrant call would hang
+     * the coroutine forever rather than throw.
+     */
     private val onStuck: (String, String) -> Unit = { _, _ -> },
     private val nowMs: () -> Long = System::currentTimeMillis
 ) {
@@ -52,10 +58,31 @@ class PendingAudioQueue(
      */
     suspend fun sweep() {
         mutex.withLock {
-            val files = candidateFiles()
-            index.pruneTo(files.map { it.name }.toSet())
+            val entries = listEntries()
+            if (entries == null) {
+                // File.listFiles() returns null (not empty) whenever the directory does not
+                // exist or cannot be read — exactly the state right after a reboot before
+                // MANAGE_EXTERNAL_STORAGE is re-established, after the user revokes storage
+                // access, or when external storage isn't mounted yet. Treating that as "no
+                // recordings" would prune every index entry, including every done and stuck
+                // flag, and once the directory reappears every recording still on disk would
+                // be re-transcribed and re-uploaded from scratch. Abandon the sweep instead:
+                // do not prune, do not process, try again next time.
+                Log.e(TAG, "Cannot list $watchDir; skipping this sweep without touching the index")
+                return@withLock
+            }
 
-            val pending = files.filter { file ->
+            // Prune against every entry actually present, not just the ones eligible for
+            // processing below — otherwise a hidden file (or any other entry excluded from
+            // `candidates`) whose recording is still on disk would be dropped from the index
+            // as if it were gone.
+            index.pruneTo(entries.map { it.name }.toSet())
+
+            val candidates = entries
+                .filter { it.isFile && !it.name.startsWith(".") }
+                .sortedBy { it.name }
+
+            val pending = candidates.filter { file ->
                 val state = index.stateOf(file.name)
                 !state.done && !state.stuck
             }
@@ -64,8 +91,14 @@ class PendingAudioQueue(
             Log.i(TAG, "Sweeping ${pending.size} unprocessed recording(s)")
             pending.forEach { file ->
                 // A file that is still being written is almost certainly the call happening
-                // right now; the observer will pick it up on CLOSE_WRITE.
-                if (nowMs() - file.lastModified() < MIN_AGE_MS) {
+                // right now; the observer will pick it up on CLOSE_WRITE. A negative age
+                // means the file's mtime is ahead of "now" — a fast device clock while
+                // recording, or a later NTP/manual correction moving the clock back — and
+                // must be treated as old, not fresh, or the recording would be skipped on
+                // every sweep forever with no attempt ever counted and no stuck notification
+                // ever sent: silently lost, the exact failure this queue exists to prevent.
+                val age = nowMs() - file.lastModified()
+                if (age in 0 until MIN_AGE_MS) {
                     Log.d(TAG, "Skipping ${file.name} this sweep: written too recently")
                     return@forEach
                 }
@@ -120,10 +153,8 @@ class PendingAudioQueue(
         }
     }
 
-    private fun candidateFiles(): List<File> =
-        watchDir.listFiles { f -> f.isFile && !f.name.startsWith(".") }
-            ?.sortedBy { it.name }
-            ?: emptyList()
+    /** Null when [watchDir] does not exist or cannot be read; distinct from an empty, readable directory. */
+    private fun listEntries(): List<File>? = watchDir.listFiles()?.toList()
 
     companion object {
         private const val TAG = "PendingAudioQueue"

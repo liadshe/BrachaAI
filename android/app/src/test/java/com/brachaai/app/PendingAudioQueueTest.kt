@@ -247,8 +247,54 @@ class PendingAudioQueueTest {
 
         queue.sweep()
 
-        assertEquals(2, processor.seen.size)
+        assertEquals(
+            "an early return after the failure would leave good-second.m4a unseen",
+            listOf("bad-first.m4a", "good-second.m4a"),
+            processor.seen
+        )
         assertTrue(index.stateOf("good-second.m4a").done)
+    }
+
+    @Test
+    fun anUnreadableWatchDirectoryLeavesTheIndexUntouched() = runBlocking {
+        setUpDirs()
+        // Represents a recording the index already knows about from before the directory
+        // became unreadable (e.g. storage access revoked, or not yet mounted after boot).
+        index.put("existing.m4a", RecordingState(attempts = 2, lastError = "no internet"))
+        // A path that does not exist makes File.listFiles() return null, the same signal
+        // Android gives for "directory not accessible" as for "does not exist yet".
+        val missingDir = File(watchDir, "does-not-exist")
+        val queue = PendingAudioQueue(
+            watchDir = missingDir,
+            index = index,
+            processor = FakeProcessor(ProcessOutcome.Completed),
+            onStuck = { name, reason -> stuckNotifications += name to reason },
+            nowMs = { FIXED_NOW }
+        )
+
+        queue.sweep()
+
+        assertTrue(
+            "an unreadable directory must not be treated as an empty one",
+            index.allNames().contains("existing.m4a")
+        )
+        assertEquals(2, index.stateOf("existing.m4a").attempts)
+    }
+
+    @Test
+    fun aRecordingWithAFutureTimestampIsProcessedNotStrandedForever() = runBlocking {
+        setUpDirs()
+        val processor = FakeProcessor(ProcessOutcome.Completed)
+        val queue = newQueue(processor)
+        // Clock skew: the file's mtime is ahead of "now", e.g. a fast device clock while
+        // recording, or an NTP/manual correction moving the clock back afterwards. A naive
+        // `now - mtime < MIN_AGE_MS` guard is true for every negative age, which would skip
+        // this recording on every sweep forever.
+        File(watchDir, "future.m4a").apply { writeText("audio") }.setLastModified(FIXED_NOW + 60_000)
+
+        queue.sweep()
+
+        assertEquals(listOf("future.m4a"), processor.seen)
     }
 
     private companion object {
