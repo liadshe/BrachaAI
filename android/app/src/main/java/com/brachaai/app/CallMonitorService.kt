@@ -28,6 +28,8 @@ class CallMonitorService : Service() {
     private var fileObserver: FileObserver? = null
     private lateinit var audioProcessor: AudioProcessor
     private lateinit var briefingSync: BriefingSync
+    private lateinit var pendingAudioQueue: PendingAudioQueue
+    private var networkWatcher: NetworkWatcher? = null
     private lateinit var notificationManager: NotificationManager
     private val errorNotificationId = java.util.concurrent.atomic.AtomicInteger(100)
 
@@ -58,6 +60,12 @@ class CallMonitorService : Service() {
             client = BriefingClient(authStore, tokenRefresher),
             store = BriefingStore.default(filesDir),
         )
+        pendingAudioQueue = PendingAudioQueue(
+            watchDir = File(WATCH_PATH),
+            index = RecordingIndex.default(filesDir),
+            processor = audioProcessor,
+            onStuck = { name, reason -> notifyStuck(name, reason) }
+        )
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannels()
 
@@ -72,6 +80,9 @@ class CallMonitorService : Service() {
         startWatching()
         isRunning = true
         flushPending()
+        // Registering delivers an immediate callback for the network the device is already
+        // on, so this also covers service start and boot.
+        networkWatcher = NetworkWatcher(this) { sweepPendingAudio() }.also { it.start() }
         startBriefingSyncLoop()
     }
 
@@ -89,6 +100,16 @@ class CallMonitorService : Service() {
                 audioProcessor.flushPending()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to flush pending uploads", e)
+            }
+        }
+    }
+
+    private fun sweepPendingAudio() {
+        serviceScope.launch {
+            try {
+                pendingAudioQueue.sweep()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to sweep pending recordings", e)
             }
         }
     }
@@ -124,6 +145,8 @@ class CallMonitorService : Service() {
     override fun onDestroy() {
         isRunning = false
         fileObserver?.stopWatching()
+        networkWatcher?.stop()
+        networkWatcher = null
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -157,10 +180,30 @@ class CallMonitorService : Service() {
     private fun handleNewFile(file: File) {
         serviceScope.launch {
             try {
-                audioProcessor.process(file)
-                // The call that just uploaded produces a new summary and new tasks.
-                briefingSync.syncNow()
+                val outcome = pendingAudioQueue.processNow(file)
+                // A success proves both network and token are good — the moment to retry
+                // anything stranded earlier. Deliberately after processNow returns: the
+                // queue's mutex is not reentrant, so sweeping from inside would deadlock.
+                //
+                // Guarded on Completed rather than run unconditionally: processNow no longer
+                // throws on an ordinary failure, so an offline call comes back RetryLater, not
+                // an exception. Sweeping anyway would immediately retry every other pending
+                // recording with the same no-network condition that just failed this one,
+                // burning one of their five attempts for nothing — five offline calls would
+                // drive every pending recording to stuck, exactly the data loss this queue
+                // exists to prevent. Only a landed call (Completed) is evidence that the
+                // network and the token are actually good right now.
+                if (outcome is ProcessOutcome.Completed) {
+                    // The call that just uploaded produces a new summary and new tasks.
+                    briefingSync.syncNow()
+                    sweepPendingAudio()
+                }
             } catch (e: Exception) {
+                // processNow no longer throws for ordinary processing failures — those are
+                // recorded in the index and, if terminal, reported via notifyStuck instead.
+                // This catch is for genuinely unexpected failures outside that policy (e.g.
+                // the watch directory vanishing, a dead index), so it stays even though the
+                // ordinary-failure path that used to land here no longer does.
                 Log.e(TAG, "Failed to process ${file.name}", e)
                 notifyError(file.name, e.message ?: "Unknown error")
             }
@@ -171,6 +214,23 @@ class CallMonitorService : Service() {
         val notification = NotificationCompat.Builder(this, ERROR_CHANNEL_ID)
             .setContentTitle("Failed to process: $filename")
             .setContentText(message)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        notificationManager.notify(errorNotificationId.getAndIncrement(), notification)
+    }
+
+    /**
+     * Posted once, when a recording is given up on. The audio file is still on disk and is
+     * never deleted; there is deliberately no retry action, so this is purely a heads-up
+     * that one call will not appear in the app.
+     */
+    private fun notifyStuck(filename: String, reason: String) {
+        val notification = NotificationCompat.Builder(this, ERROR_CHANNEL_ID)
+            .setContentTitle("Could not process: $filename")
+            .setContentText("The recording was kept on your phone. $reason")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("The recording was kept on your phone. $reason"))
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)

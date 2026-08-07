@@ -42,9 +42,15 @@ class PendingAudioQueue(
      *
      * No age check: `FileObserver.CLOSE_WRITE` already means the writer is finished, which
      * is exactly the guarantee [sweep] lacks and has to approximate with [MIN_AGE_MS].
+     *
+     * Returns the outcome so the caller can tell a landed call from one that did not — in
+     * particular, whether following up with a sweep of the rest of the queue is justified
+     * (see the caller in `CallMonitorService.handleNewFile`). [ProcessOutcome.Skipped] is
+     * also what comes back when the recording was already `done` or `stuck`: that is a
+     * terminal, not-a-failure result, not a signal about the network.
      */
-    suspend fun processNow(file: File) {
-        mutex.withLock {
+    suspend fun processNow(file: File): ProcessOutcome {
+        return mutex.withLock {
             processOneLocked(file)
         }
     }
@@ -108,15 +114,16 @@ class PendingAudioQueue(
     }
 
     /** Caller must hold [mutex]. */
-    private suspend fun processOneLocked(file: File) {
+    private suspend fun processOneLocked(file: File): ProcessOutcome {
         val name = file.name
         val before = index.stateOf(name)
         if (before.done || before.stuck) {
             Log.d(TAG, "Ignoring $name: already ${if (before.done) "done" else "given up on"}")
-            return
+            return ProcessOutcome.Skipped
         }
 
-        when (val outcome = processor.process(file)) {
+        val outcome = processor.process(file)
+        when (outcome) {
             is ProcessOutcome.Completed, is ProcessOutcome.Skipped -> {
                 // attempts resets to 0: the entry now only records that this is finished, and
                 // a stale count would be misleading if the file is somehow seen again.
@@ -142,6 +149,7 @@ class PendingAudioQueue(
                 }
             }
         }
+        return outcome
     }
 
     /** Never lets a notification failure break the sweep — the bookkeeping already happened. */

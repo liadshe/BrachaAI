@@ -201,6 +201,38 @@ class PendingAudioQueueTest {
     }
 
     @Test
+    fun processNowReturnsTheOutcomeTheProcessorProduced() = runBlocking {
+        setUpDirs()
+        // CallMonitorService.handleNewFile decides whether to sweep the rest of the queue
+        // off this return value, so it must be the real outcome, not just Unit.
+        val processor = FakeProcessor(ProcessOutcome.RetryLater("no internet"))
+        val queue = newQueue(processor)
+        val file = recording("returns-outcome.m4a")
+
+        val outcome = queue.processNow(file)
+
+        assertEquals(ProcessOutcome.RetryLater("no internet"), outcome)
+    }
+
+    @Test
+    fun processNowReturnsSkippedForAnAlreadyFinishedRecording() = runBlocking {
+        setUpDirs()
+        val processor = FakeProcessor(ProcessOutcome.Completed)
+        val queue = newQueue(processor)
+        val file = recording("already-done.m4a")
+        index.put("already-done.m4a", RecordingState(done = true))
+
+        val outcome = queue.processNow(file)
+
+        assertEquals(
+            "already-done is terminal, not a fresh failure or success",
+            ProcessOutcome.Skipped,
+            outcome
+        )
+        assertTrue("must not re-run the processor on an already-finished recording", processor.seen.isEmpty())
+    }
+
+    @Test
     fun sweepPrunesIndexEntriesWhoseRecordingIsGone() = runBlocking {
         setUpDirs()
         val queue = newQueue(FakeProcessor(ProcessOutcome.Completed))
