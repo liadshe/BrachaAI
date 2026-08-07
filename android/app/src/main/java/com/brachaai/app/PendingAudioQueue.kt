@@ -100,8 +100,16 @@ class PendingAudioQueue(
                 .filter { isEligibleRecording(it) }
                 .sortedBy { it.name }
 
+            // One read of the index for the whole listing, never stateOf() per file.
+            // stateOf parses the entire index file on every call, so asking it about N
+            // recordings costs N parses of a file that itself grows with N. On a device with
+            // ~3,800 recordings and a 400 KB index that was ~1.5 GB of JSON parsing per
+            // sweep, burning minutes of CPU while holding the mutex below — which is the lock
+            // processNow needs, so a call that had just been recorded sat unprocessed until
+            // the sweep finished. It had been instant before this queue existed.
+            val states = index.snapshot()
             val pending = candidates.filter { file ->
-                val state = index.stateOf(file.name)
+                val state = states[file.name] ?: RecordingState()
                 !state.done && !state.stuck
             }
             if (pending.isEmpty()) return@withLock

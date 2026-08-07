@@ -55,6 +55,24 @@ class RecordingIndex(private val file: File) {
     }
 
     /**
+     * Every recorded state in one read.
+     *
+     * Exists because [stateOf] parses the whole file on every call, so asking it about N
+     * recordings costs N parses of a file that grows with N. A sweep does exactly that, and
+     * on a device with thousands of recordings it turned into gigabytes of JSON parsing per
+     * sweep — held under the queue's mutex, which blocked the file-observer path behind it
+     * and delayed a freshly-recorded call by minutes.
+     *
+     * Callers filtering a directory listing must use this, not [stateOf] in a loop.
+     *
+     * A missing recording is absent from the map; treat that as [RecordingState] defaults,
+     * exactly as [stateOf] does.
+     */
+    fun snapshot(): Map<String, RecordingState> = synchronized(indexLock) {
+        load()
+    }
+
+    /**
      * Records [state] for [name] and reports whether it actually reached disk.
      *
      * There is no in-memory cache behind this: a failed write is simply lost, and the next

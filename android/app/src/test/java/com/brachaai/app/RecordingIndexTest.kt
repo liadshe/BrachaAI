@@ -79,6 +79,46 @@ class RecordingIndexTest {
     }
 
     @Test
+    fun snapshotReturnsEveryStateAndAgreesWithStateOf() {
+        // Sweeps must read the index once for a whole directory listing. Using stateOf in a
+        // loop costs one full parse per recording, which is what delayed freshly-recorded
+        // calls by minutes on a device with thousands of files.
+        val file = newIndexFile()
+        val index = RecordingIndex(file)
+        index.put("done.m4a", RecordingState(done = true))
+        index.put("stuck.m4a", RecordingState(attempts = 5, stuck = true, lastError = "too large"))
+        index.put("trying.m4a", RecordingState(attempts = 2))
+
+        val snapshot = RecordingIndex(file).snapshot()
+
+        assertEquals(setOf("done.m4a", "stuck.m4a", "trying.m4a"), snapshot.keys)
+        assertTrue(snapshot.getValue("done.m4a").done)
+        assertTrue(snapshot.getValue("stuck.m4a").stuck)
+        assertEquals(2, snapshot.getValue("trying.m4a").attempts)
+        assertEquals(index.stateOf("stuck.m4a"), snapshot.getValue("stuck.m4a"))
+    }
+
+    @Test
+    fun snapshotOmitsUnknownRecordingsSoCallersApplyTheDefault() {
+        // stateOf invents a default for an unknown name; snapshot cannot, so callers must
+        // substitute RecordingState() themselves. Pinned so that contract cannot drift.
+        val index = RecordingIndex(newIndexFile())
+        index.put("known.m4a", RecordingState(done = true))
+
+        assertFalse(index.snapshot().containsKey("never-seen.m4a"))
+        assertEquals(RecordingState(), index.stateOf("never-seen.m4a"))
+    }
+
+    @Test
+    fun snapshotOfACorruptIndexIsEmptyRatherThanThrowing() {
+        val file = newIndexFile()
+        RecordingIndex(file).put("done.m4a", RecordingState(done = true))
+        file.writeText("{\"done.m4a\":{\"done\":tr")
+
+        assertTrue(RecordingIndex(file).snapshot().isEmpty())
+    }
+
+    @Test
     fun putAllWritesEveryEntryInOnePassAndKeepsWhatWasAlreadyThere() {
         // Used by the first-run baseline, which adopts a whole folder of pre-existing
         // recordings at once; doing that through put() would rewrite the file per recording.
