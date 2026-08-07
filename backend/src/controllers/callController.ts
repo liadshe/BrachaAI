@@ -6,28 +6,7 @@ import * as aiService from "../services/aiService";
 import { createTasksFromAi } from "../services/taskService";
 import { AuthRequest } from "../middleware/authMiddleware";
 import { validateObjectIdList } from "../utils/objectId";
-
-const parseFilenameDate = (dateString: string): Date => {
-  if (!dateString) return new Date(); // Fallback to now if no date is provided
-
-  try {
-    // Expected format from Android: "260415_165702" (YYMMDD_HHMMSS)
-    const [datePart, timePart] = dateString.split('_');
-
-    const year = parseInt(datePart.substring(0, 2)) + 2000;
-    const month = parseInt(datePart.substring(2, 4)) - 1;
-    const day = parseInt(datePart.substring(4, 6));
-
-    const hour = parseInt(timePart.substring(0, 2));
-    const minute = parseInt(timePart.substring(2, 4));
-    const second = parseInt(timePart.substring(4, 6));
-
-    return new Date(year, month, day, hour, minute, second);
-  } catch (error) {
-    console.error("Failed to parse date string, falling back to current time", error);
-    return new Date();
-  }
-};
+import { parseFilenameDate } from "../utils/callDate";
 
 /**
  * Whole seconds, or undefined for anything we will not stand behind.

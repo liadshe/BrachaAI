@@ -80,9 +80,15 @@ digits with an optional leading `+`, consistently. The same person as
 `0521234567` outgoing and `+972521234567` incoming still yields two contacts.
 Ownership is unaffected; only deduplication suffers.
 
-**`callDateTime` is built in the server's timezone** from device-local wall
-time, so a UTC container and a UTC+3 user put every call off by the offset.
-Pre-existing, but newly visible now that calls reach the right account.
+**~~`callDateTime` is built in the server's timezone~~ — fixed.** The filename's
+wall clock is now interpreted in `Asia/Jerusalem` by
+`backend/src/utils/callDate.ts` rather than in whatever zone the container
+happens to run in, so the stored instant no longer moves with the deployment.
+Two caveats remain: calls written *before* this fix are still stored at the old
+offset and would need a one-off migration, and the zone is an assumption about
+the user, not a fact from the device — the real fix is for the client to send an
+instant (it already computes one in `FilenameParser.toEpochMillis`), which only
+helps once every installed app has updated.
 
 **Contact matching by name can mislabel.** If two different people were
 recorded under the same contact name — "Mom", "Office", "Unknown" — the second
