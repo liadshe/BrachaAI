@@ -121,6 +121,28 @@ class RecordingIndexTest {
     }
 
     /**
+     * There is no in-memory cache behind [RecordingIndex.put], so a failed write is a lost
+     * write — not "state kept for this run", as the log line used to claim. The caller has to
+     * be able to tell, because a lost `done` re-uploads the call and a lost `stuck` re-notifies
+     * and re-burns attempts forever.
+     */
+    @Test
+    fun putReportsWhetherTheStateActuallyReachedDisk() {
+        val index = RecordingIndex(newIndexFile())
+
+        assertTrue("a writable index reports success", index.put("a.m4a", RecordingState(done = true)))
+
+        // The parent is a regular file, so every write below it must fail.
+        val blocker = tempFolder.newFile("blocker")
+        val unwritable = RecordingIndex(File(blocker, "recordings.json"))
+
+        assertFalse(
+            "a write that never reached disk must not be reported as persisted",
+            unwritable.put("b.m4a", RecordingState(stuck = true))
+        )
+    }
+
+    /**
      * Without file-as-source-of-truth, two separate RecordingIndex instances pointing at
      * the same file hold independent in-memory snapshots loaded once at construction. Even
      * with a process-wide lock on persist(), instance B's write overwrites instance A's with

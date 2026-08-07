@@ -19,6 +19,22 @@ sealed class ProcessOutcome {
     /** Deliberately not processed (under five seconds). Terminal, and not a failure. */
     object Skipped : ProcessOutcome()
 
+    /**
+     * No attempt was made and no state changed. Either the queue already holds a terminal
+     * answer for this recording (`done` or `stuck`), or the directory entry is not an
+     * eligible recording at all — a hidden temp file the recorder has not renamed yet, or a
+     * subdirectory.
+     *
+     * Deliberately *not* [Skipped]. [Skipped] means "the audio was inspected and is not a
+     * call worth transcribing", which is a success and therefore deletion-eligible in
+     * [AudioProcessor.applyDeletion]. Reusing it for the short-circuit would make a **stuck**
+     * recording deletable the moment any caller routed this value into that gate — a
+     * recording destroyed although its call never landed, the exact failure this queue
+     * exists to prevent. This value is never deletion-eligible, and no [RecordingProcessor]
+     * ever returns it: only [PendingAudioQueue] produces it, without running an attempt.
+     */
+    object AlreadyHandled : ProcessOutcome()
+
     /** Transient failure — no internet, a timeout, a rate limit. Try again later. */
     data class RetryLater(val reason: String) : ProcessOutcome()
 

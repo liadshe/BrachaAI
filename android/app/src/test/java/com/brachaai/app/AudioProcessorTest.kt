@@ -279,6 +279,140 @@ class AudioProcessorTest {
         assertTrue(recording.exists())
     }
 
+    @Test
+    fun alreadyHandledIsNeverDeletionEligible() {
+        // PendingAudioQueue returns AlreadyHandled for a recording that is already done OR
+        // already *stuck*. If a future caller routed it into this gate and it were treated
+        // like Skipped, a stuck recording — a call that never landed — would be destroyed.
+        val recording = recordingIn("already-handled")
+        processorWithDeleteFlag(true).applyDeletion(
+            AudioProcessor.PipelineResult(ProcessOutcome.AlreadyHandled, mayDeleteRecording = true),
+            recording
+        )
+        assertTrue("no attempt was made, so nothing may be deleted", recording.exists())
+    }
+
+    // ------------------------------------------------------- pipelineResultFor
+    //
+    // The applyDeletion tests above hand-construct their PipelineResults, so nothing pinned
+    // that the pipeline *produces* the right one. This is the table that decides, driven for
+    // every row of UploadResult.
+
+    @Test
+    fun aSuccessfulUploadCompletesAndReleasesTheRecording() {
+        val result = newProcessor(settings()).pipelineResultFor(AudioProcessor.UploadResult.Success, enqueued = false)
+
+        assertEquals(ProcessOutcome.Completed, result.outcome)
+        assertTrue(result.mayDeleteRecording)
+    }
+
+    @Test
+    fun aRejectedUploadGivesUpAndKeepsTheRecording() {
+        // The spec's headline behaviour change: a backend 400/422 used to set
+        // transcriptIsDurable = true and delete. The call never reached the backend, so the
+        // recording is the only copy of it and is now kept and marked stuck instead.
+        val result = newProcessor(settings()).pipelineResultFor(AudioProcessor.UploadResult.Rejected, enqueued = false)
+
+        assertTrue("a rejected payload must never be retried", result.outcome is ProcessOutcome.GiveUp)
+        assertFalse("a call that never landed must not lose its only recording", result.mayDeleteRecording)
+    }
+
+    @Test
+    fun aRejectedUploadSurvivesTheDeletionGateWithTheSettingOn() {
+        // End to end for that same row: the produced result, through the real gate.
+        val recording = recordingIn("rejected-end-to-end")
+        val processor = processorWithDeleteFlag(true)
+
+        processor.applyDeletion(
+            processor.pipelineResultFor(AudioProcessor.UploadResult.Rejected, enqueued = false),
+            recording
+        )
+
+        assertTrue("a 400/422 must keep the recording even with delete-after-processing on", recording.exists())
+    }
+
+    @Test
+    fun aTransientFailureWithADurableQueueEntryCompletesAndReleasesTheRecording() {
+        // Transient means a token was present, and the queue here is empty, so
+        // queuedTranscriptIsDurable says yes: the transcript has a real home.
+        val result = newProcessor(settings()).pipelineResultFor(AudioProcessor.UploadResult.Transient, enqueued = true)
+
+        assertEquals(
+            "the transcript is queued, so re-transcribing would upload the call twice",
+            ProcessOutcome.Completed,
+            result.outcome
+        )
+        assertTrue(result.mayDeleteRecording)
+    }
+
+    @Test
+    fun anUnauthenticatedFailureWithNoLoginHistoryCompletesButKeepsTheRecording() {
+        val authStore = AuthStore(RuntimeEnvironment.getApplication())
+        assertFalse("precondition: this device has never held a token", authStore.hasEverAuthenticated())
+
+        val result = newProcessor(settings(), authStore = authStore)
+            .pipelineResultFor(AudioProcessor.UploadResult.Unauthenticated, enqueued = true)
+
+        assertEquals(
+            "the transcript is queued either way, so it must not be transcribed again",
+            ProcessOutcome.Completed,
+            result.outcome
+        )
+        assertFalse(
+            "a login that may never happen is not a reason to destroy the recording",
+            result.mayDeleteRecording
+        )
+    }
+
+    @Test
+    fun aFailedEnqueueRetriesLaterAndKeepsTheRecording() {
+        val processor = newProcessor(settings())
+
+        listOf(AudioProcessor.UploadResult.Transient, AudioProcessor.UploadResult.Unauthenticated)
+            .forEach { uploadResult ->
+                val result = processor.pipelineResultFor(uploadResult, enqueued = false)
+
+                assertTrue(
+                    "nothing was persisted anywhere, so the audio is the only copy: $uploadResult",
+                    result.outcome is ProcessOutcome.RetryLater
+                )
+                assertFalse(result.mayDeleteRecording)
+            }
+    }
+
+    // ------------------------------------------------------- unparseable filenames
+
+    @Test
+    fun aFilenameThatCannotParseIsTheTriggerForGivingUp() {
+        // Documents what actually throws out of the pipeline: parseFilename needs at least
+        // Name_YYMMDD_HHMMSS. Before this, that IllegalArgumentException landed in the general
+        // catch as RetryLater and burned all five attempts on a name that can never parse.
+        try {
+            parseFilename("recording-001.m4a")
+            org.junit.Assert.fail("expected an IllegalArgumentException for a non-conforming filename")
+        } catch (expected: IllegalArgumentException) {
+            // exactly what AudioProcessor now catches specifically
+        }
+    }
+
+    @Test
+    fun anUnparseableFilenameGivesUpImmediatelyAndKeepsTheRecording() {
+        val recording = recordingIn("unparseable")
+        val processor = processorWithDeleteFlag(true)
+
+        val result = processor.unparseableFilenameResult("recording-001.m4a")
+
+        assertTrue("no retry can change a filename", result.outcome is ProcessOutcome.GiveUp)
+        assertTrue(
+            "the reason should name the file so the notification is actionable",
+            (result.outcome as ProcessOutcome.GiveUp).reason.contains("recording-001.m4a")
+        )
+        assertFalse(result.mayDeleteRecording)
+
+        processor.applyDeletion(result, recording)
+        assertTrue("giving up never destroys the recording", recording.exists())
+    }
+
     // ------------------------------------------------------- whisper status mapping
 
     @Test

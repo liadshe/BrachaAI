@@ -95,19 +95,35 @@ class CallMonitorService : Service() {
         return START_STICKY
     }
 
+    /**
+     * Runs one piece of background work, letting cancellation through.
+     *
+     * A [CancellationException] here is not a failure: it means `onDestroy` cancelled
+     * `serviceScope`. Catching it as an error logs a spurious ERROR on every clean stop and
+     * swallows the signal structured concurrency depends on, so it is rethrown ahead of the
+     * general catch — the same fix already applied to `handleNewFile` and
+     * `AudioProcessor.process`. Everything else is logged and swallowed: none of these jobs
+     * is allowed to take the service down.
+     */
+    private suspend fun runGuarded(what: String, block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "$what failed", e)
+        }
+    }
+
     private fun flushPending() {
         serviceScope.launch {
-            try {
-                audioProcessor.flushPending()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to flush pending uploads", e)
-            }
+            runGuarded("Flushing pending uploads") { audioProcessor.flushPending() }
         }
     }
 
     private fun sweepPendingAudio() {
         serviceScope.launch {
-            try {
+            runGuarded("Sweeping pending recordings") {
                 pendingAudioQueue.sweep()
                 // Unconditional, unlike the sync in handleNewFile: sweep() returns Unit, so
                 // there is no outcome here to gate on — the service cannot tell whether this
@@ -118,19 +134,19 @@ class CallMonitorService : Service() {
                 // would not refresh until the six-hour tick or the app next comes to the
                 // foreground.
                 briefingSync.syncNow()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to sweep pending recordings", e)
             }
+            // Deliberately outside the block above, so it runs even if the sweep threw, and
+            // deliberately after sweep() has returned — i.e. after PendingAudioQueue's mutex
+            // is released. A drain walks up to 200 queued transcripts at 30s connect / 60s
+            // read timeouts; it used to run inside AudioProcessor's success branch with that
+            // mutex held, which could block every processNow for hours.
+            runGuarded("Queue drain after a sweep") { audioProcessor.flushPending() }
         }
     }
 
     private fun syncBriefings() {
         serviceScope.launch {
-            try {
-                briefingSync.syncNow()
-            } catch (e: Exception) {
-                Log.e(TAG, "Briefing sync failed", e)
-            }
+            runGuarded("Briefing sync") { briefingSync.syncNow() }
         }
     }
 
@@ -138,16 +154,34 @@ class CallMonitorService : Service() {
      * Periodic refresh, riding on this already-persistent service rather than adding
      * WorkManager for one job. If this service is dead the app is not recording calls
      * either, so there is nothing new to sync.
+     *
+     * The sweep rides the same tick — no new timer and no new wakeup. It is the backstop for
+     * the failures that are *not* correlated with a network change. The other two triggers
+     * are a validated-network transition and a `Completed` `handleNewFile`; between them they
+     * miss the case of a transcription that fails while online (an OpenAI 429 or 5xx) on a
+     * phone that stays on one Wi-Fi and takes no further calls. Such a recording would sit at
+     * one attempt forever: never retried, never reaching five attempts, never marked stuck,
+     * and so never reported to the user at all — silently lost, which is the failure this
+     * whole queue exists to prevent.
      */
     private fun startBriefingSyncLoop() {
         serviceScope.launch {
             while (isActive) {
-                try {
-                    briefingSync.syncNow()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Periodic briefing sync failed", e)
-                }
+                runGuarded("Periodic briefing sync") { briefingSync.syncNow() }
                 delay(BRIEFING_SYNC_INTERVAL_MS)
+                // Deliberately after the delay rather than before it. The loop's first pass
+                // runs inside onCreate, before NetworkWatcher has reported whether there is a
+                // validated network at all; sweeping there would burn one of every pending
+                // recording's five attempts against a connection that may well be down, and
+                // BootReceiver restarts this service on every boot, so a handful of offline
+                // reboots would strand every recording. The backstop exists for a phone that
+                // has been sitting on one network for hours, so it loses nothing by waiting
+                // for the first tick.
+                runGuarded("Periodic sweep of pending recordings") { pendingAudioQueue.sweep() }
+                // Same reason as the drain after sweepPendingAudio: outside the sweep so a
+                // sweep failure cannot skip it, and after sweep() returns so the queue's
+                // mutex is not held for the length of a 200-entry drain.
+                runGuarded("Queue drain after the periodic sweep") { audioProcessor.flushPending() }
             }
         }
     }
@@ -211,6 +245,17 @@ class CallMonitorService : Service() {
                 // this comment exists so the next reader doesn't read this as "network is
                 // confirmed good" and rely on that elsewhere.
                 if (outcome is ProcessOutcome.Completed) {
+                    // Replaces the flushPending() that used to sit on AudioProcessor's upload
+                    // success path. Same trigger, same intent — network and token both just
+                    // proved good, so this is the best moment to drain the transcript queue —
+                    // but here processNow has already returned, so PendingAudioQueue's mutex
+                    // is released. Inside it, a drain of up to 200 entries at 30s connect /
+                    // 60s read timeouts could hold that mutex for hours and block every other
+                    // processNow behind it.
+                    //
+                    // Guarded, so a failed drain cannot retract a call that already landed or
+                    // post a bogus "Failed to process" notification for it.
+                    runGuarded("Queue drain after a successful upload") { audioProcessor.flushPending() }
                     // The call that just uploaded produces a new summary and new tasks.
                     briefingSync.syncNow()
                     sweepPendingAudio()

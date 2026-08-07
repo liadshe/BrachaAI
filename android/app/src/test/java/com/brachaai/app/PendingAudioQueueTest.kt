@@ -1,5 +1,8 @@
 package com.brachaai.app
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -215,7 +218,7 @@ class PendingAudioQueueTest {
     }
 
     @Test
-    fun processNowReturnsSkippedForAnAlreadyFinishedRecording() = runBlocking {
+    fun processNowReportsAlreadyHandledForAnAlreadyFinishedRecording() = runBlocking {
         setUpDirs()
         val processor = FakeProcessor(ProcessOutcome.Completed)
         val queue = newQueue(processor)
@@ -225,11 +228,122 @@ class PendingAudioQueueTest {
         val outcome = queue.processNow(file)
 
         assertEquals(
-            "already-done is terminal, not a fresh failure or success",
-            ProcessOutcome.Skipped,
+            "not Skipped: Skipped is deletion-eligible, and this same branch also fires for a " +
+                "stuck recording, which must never be deletable",
+            ProcessOutcome.AlreadyHandled,
             outcome
         )
         assertTrue("must not re-run the processor on an already-finished recording", processor.seen.isEmpty())
+    }
+
+    @Test
+    fun processNowReportsAlreadyHandledForAStuckRecording() = runBlocking {
+        setUpDirs()
+        val processor = FakeProcessor(ProcessOutcome.Completed)
+        val queue = newQueue(processor)
+        val file = recording("given-up.m4a")
+        index.put("given-up.m4a", RecordingState(attempts = 5, stuck = true, lastError = "nope"))
+
+        val outcome = queue.processNow(file)
+
+        assertEquals(ProcessOutcome.AlreadyHandled, outcome)
+        assertTrue(processor.seen.isEmpty())
+        assertTrue("a stuck recording is never deleted", file.exists())
+    }
+
+    @Test
+    fun processNowIgnoresAHiddenFileAndADirectory() = runBlocking {
+        setUpDirs()
+        // sweep() has always filtered these out; processNow applied no filter at all, so a
+        // recorder that writes ".pending_x.m4a" before renaming it — or any stray entry —
+        // earned an index entry, five RetryLater attempts and a user-facing "Could not
+        // process" notification for something that was never a call.
+        val processor = FakeProcessor(ProcessOutcome.Completed)
+        val queue = newQueue(processor)
+        val hidden = File(watchDir, ".pending_x.m4a").apply { writeText("half") }
+        val directory = File(watchDir, "a-folder").apply { mkdirs() }
+
+        assertEquals(ProcessOutcome.AlreadyHandled, queue.processNow(hidden))
+        assertEquals(ProcessOutcome.AlreadyHandled, queue.processNow(directory))
+
+        assertTrue("neither entry is a recording", processor.seen.isEmpty())
+        assertTrue(
+            "an ineligible entry must leave no trace in the index",
+            index.allNames().isEmpty()
+        )
+    }
+
+    /**
+     * The mutex is the only thing standing between a sweep and a `FileObserver` event landing
+     * on the same recording and uploading the call twice, and the design doc requires this
+     * test by name. Delete the `Mutex` from [PendingAudioQueue] and this is the test that
+     * fails; nothing else in the suite would notice.
+     *
+     * The interleaving is deterministic, not a race, because `runBlocking` gives both
+     * coroutines one event-loop thread and [OverlappingProcessor] suspends (rather than
+     * blocks) inside the attempt:
+     *
+     *  - `launch { sweep() }` takes the mutex uncontended, enters the processor, completes
+     *    `entered`, and suspends in `delay`.
+     *  - The parent resumes from `entered.await()` and calls `processNow` on the same file —
+     *    i.e. while the sweep is provably still mid-attempt and still holding the mutex.
+     *  - `processNow` suspends on the mutex. Only when the sweep finishes and releases it does
+     *    `processOneLocked` run, by which point the index already says `done`, so it
+     *    short-circuits to `AlreadyHandled` and never reaches the processor.
+     *
+     * Without the mutex, `processNow` would instead run `processOneLocked` immediately: the
+     * sweep has not returned from `processor.process` yet, so nothing has written `done` to
+     * the index, `before.done` is false, and the same file is handed to the processor a second
+     * time — `seen` has two entries and `maxConcurrent` is 2. Both assertions below fail.
+     */
+    @Test
+    fun aSweepAndANewFileEventNeverProcessTheSameRecordingTwice() = runBlocking {
+        setUpDirs()
+        val file = recording("overlap.m4a")
+        val processor = OverlappingProcessor(holdMs = 100)
+        val queue = newQueue(processor)
+
+        val sweepJob = launch { queue.sweep() }
+        processor.entered.await()   // the sweep is inside the attempt, holding the mutex
+
+        val outcome = queue.processNow(file)
+        sweepJob.join()
+
+        assertEquals(
+            "the same recording must not be transcribed and uploaded twice",
+            listOf("overlap.m4a"),
+            processor.seen
+        )
+        assertEquals("two attempts must never be in flight at once", 1, processor.maxConcurrent)
+        assertEquals(
+            "the second caller waited for the lock and then found the recording already done",
+            ProcessOutcome.AlreadyHandled,
+            outcome
+        )
+    }
+
+    /**
+     * Suspends inside the attempt and reports whether two attempts ever overlapped.
+     *
+     * `delay` rather than `Thread.sleep` on purpose: `runBlocking`'s event loop is single
+     * threaded, so only a suspension hands control to the other coroutine. Blocking would
+     * serialize the test by accident and pass even with the mutex removed.
+     */
+    private class OverlappingProcessor(private val holdMs: Long) : RecordingProcessor {
+        val seen = mutableListOf<String>()
+        val entered = CompletableDeferred<Unit>()
+        var maxConcurrent = 0
+        private var inFlight = 0
+
+        override suspend fun process(audioFile: File): ProcessOutcome {
+            seen += audioFile.name
+            inFlight += 1
+            maxConcurrent = maxOf(maxConcurrent, inFlight)
+            entered.complete(Unit)
+            delay(holdMs)
+            inFlight -= 1
+            return ProcessOutcome.Completed
+        }
     }
 
     @Test

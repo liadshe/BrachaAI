@@ -112,6 +112,12 @@ class AudioProcessor(
      * The outcome check is not redundant with the flag: it means a future caller that
      * miscomputes `mayDeleteRecording` still cannot destroy an unprocessed recording.
      *
+     * [ProcessOutcome.AlreadyHandled] is deliberately absent from `terminalSuccess`, and must
+     * stay absent. It covers a recording that is already `stuck` as well as one that is
+     * already `done`; treating it as a success would let a call that never landed be
+     * destroyed. Only [ProcessOutcome.Completed] and [ProcessOutcome.Skipped] mean the call
+     * is accounted for.
+     *
      * `internal` so the unit tests can drive every row of the outcome table directly.
      */
     internal fun applyDeletion(result: PipelineResult, audioFile: File) {
@@ -151,8 +157,68 @@ class AudioProcessor(
         }
     }
 
-    // suspend so the Success branch can call flushPending() directly. Wrapping it in
-    // runBlocking instead would block an IO dispatcher thread for a whole queue drain.
+    /**
+     * The answer for a recording whose filename [parseFilename] cannot read.
+     *
+     * `GiveUp`, not `RetryLater`: the name is a fixed property of the file, so every one of
+     * the five attempts would fail identically. `mayDeleteRecording = false` — the call never
+     * reached the backend, so the recording stays on disk for manual recovery, exactly as for
+     * any other `GiveUp`. Realistically this is a recorder app with a different naming
+     * scheme, in which case one notification naming the file is more use than five silent
+     * retries.
+     *
+     * `internal` for the unit tests.
+     */
+    internal fun unparseableFilenameResult(filename: String): PipelineResult = PipelineResult(
+        ProcessOutcome.GiveUp("filename is not ContactName_YYMMDD_HHMMSS: $filename"),
+        mayDeleteRecording = false
+    )
+
+    /**
+     * Turns one upload attempt into the pipeline's answer, with no IO of its own.
+     *
+     * Pulled out of [runPipeline] because this table — especially `Rejected` → `GiveUp` with
+     * the recording *kept* — is the branch's headline behaviour change, and inside the
+     * pipeline it sat behind FFmpeg and two OpenAI calls with no JVM seam, so nothing could
+     * test it. The network calls stay in [runPipeline]: this takes their results only.
+     *
+     * [enqueued] is the result of the [PendingUploadStore.enqueue] the caller already did on
+     * the Unauthenticated/Transient path, and is ignored on the other two.
+     *
+     * `internal` for the unit tests.
+     */
+    internal fun pipelineResultFor(uploadResult: UploadResult, enqueued: Boolean): PipelineResult =
+        when (uploadResult) {
+            is UploadResult.Success ->
+                PipelineResult(ProcessOutcome.Completed, mayDeleteRecording = true)
+
+            is UploadResult.Rejected ->
+                // The call never reached the backend and never will, so the recording is the
+                // only copy of it. Kept forever, never retried. This used to delete.
+                PipelineResult(ProcessOutcome.GiveUp("backend rejected the payload"), mayDeleteRecording = false)
+
+            is UploadResult.Unauthenticated, is UploadResult.Transient ->
+                if (!enqueued) {
+                    // Nothing was persisted anywhere, so the audio is still the only copy —
+                    // and re-transcribing later cannot produce a duplicate.
+                    PipelineResult(ProcessOutcome.RetryLater("transcript could not be queued"), false)
+                } else {
+                    // The transcript IS durably queued, so this recording is finished as far
+                    // as transcription goes — hence Completed. Whether the recording may also
+                    // be deleted is the separate, stricter question below.
+                    PipelineResult(
+                        ProcessOutcome.Completed,
+                        mayDeleteRecording = queuedTranscriptIsDurable(
+                            enqueued = true,
+                            wasUnauthenticated = uploadResult is UploadResult.Unauthenticated
+                        )
+                    )
+                }
+        }
+
+    // suspend because it is called from a suspend context and does blocking IO on the IO
+    // dispatcher. It deliberately does NOT drain the transcript queue any more — see the
+    // comment on the upload block below.
     private suspend fun runPipeline(audioFile: File): PipelineResult {
         // Recordings under five seconds are deliberately not calls worth transcribing. That
         // is a terminal decision, not a failure, so the recording may go.
@@ -175,7 +241,17 @@ class AudioProcessor(
         try {
             println("1. Starting processing for: ${audioFile.name}")
 
-            val parsedInfo = parseFilename(audioFile.name)
+            val parsedInfo = try {
+                parseFilename(audioFile.name)
+            } catch (e: IllegalArgumentException) {
+                // Caught specifically rather than left to the general catch in process(),
+                // which would call it RetryLater: a name that does not match
+                // ContactName_YYMMDD_HHMMSS will not match on the fifth attempt either, so
+                // retrying only burns five attempts and then posts a misleading "Could not
+                // process" for a file that was never going to parse.
+                Log.e(TAG, "Unparseable recording filename ${audioFile.name}; no retry can fix it", e)
+                return unparseableFilenameResult(audioFile.name)
+            }
             println("2. Parsed Info - Name: ${parsedInfo.contactName}, Date: ${parsedInfo.date}")
 
             println("3. Converting audio to true MP3 format...")
@@ -241,55 +317,31 @@ class AudioProcessor(
             )
 
             println("9. Sending data to backend...")
-            return when (val uploadResult = attemptUpload(payload)) {
+            val uploadResult = attemptUpload(payload)
+            // The enqueue is the one side effect in this decision, so it stays out here next
+            // to the network call, leaving pipelineResultFor pure and testable.
+            //
+            // There is deliberately no flushPending() on the success path any more. This
+            // whole method runs with PendingAudioQueue's mutex held, and a drain walks up to
+            // PendingUploadStore.MAX_ENTRIES uploads at 30s connect / 60s read timeouts —
+            // worst case hours with the queue's lock held, blocking every processNow behind
+            // it. CallMonitorService now drains after processNow returns and after each
+            // sweep, i.e. once the lock is released.
+            val enqueued = when (uploadResult) {
                 is UploadResult.Success -> {
                     println("SUCCESS! Data sent to backend")
-                    // The result is built before draining the queue, and deliberately
-                    // returned regardless of how the drain goes. The upload already landed;
-                    // flushPending() below is opportunistic housekeeping for OTHER queued
-                    // calls, and it suspends on a mutex and IO, both cancellation points. A
-                    // throw from it must never retract a success that already happened —
-                    // doing so would send this call back through the pipeline and re-upload
-                    // it a second time.
-                    val result = PipelineResult(ProcessOutcome.Completed, mayDeleteRecording = true)
-                    try {
-                        // Network and token both just proved good — the best possible moment
-                        // to also drain the transcript queue.
-                        flushPending()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Queue drain after a successful upload failed; the upload itself stands", e)
-                    }
-                    result
+                    false
                 }
                 is UploadResult.Rejected -> {
-                    // The call never reached the backend and never will, so the recording is
-                    // the only copy of it. Kept forever, never retried.
                     Log.e(TAG, "Backend permanently rejected upload for ${audioFile.name}; keeping the recording")
-                    PipelineResult(ProcessOutcome.GiveUp("backend rejected the payload"), false)
+                    false
                 }
                 is UploadResult.Unauthenticated, is UploadResult.Transient -> {
                     println("Upload failed; queueing transcript for retry")
-                    val queued = pendingStore.enqueue(payload)
-                    if (!queued) {
-                        // Nothing was persisted anywhere, so the audio is still the only
-                        // copy — and re-transcribing later cannot produce a duplicate.
-                        PipelineResult(ProcessOutcome.RetryLater("transcript could not be queued"), false)
-                    } else {
-                        // The transcript IS durably queued, so this recording is finished as
-                        // far as transcription goes — hence Completed. Whether the recording
-                        // may also be deleted is the separate, stricter question below.
-                        PipelineResult(
-                            ProcessOutcome.Completed,
-                            mayDeleteRecording = queuedTranscriptIsDurable(
-                                enqueued = true,
-                                wasUnauthenticated = uploadResult is UploadResult.Unauthenticated
-                            )
-                        )
-                    }
+                    pendingStore.enqueue(payload)
                 }
             }
+            return pipelineResultFor(uploadResult, enqueued)
         } finally {
             val temp = mp3File
             try {

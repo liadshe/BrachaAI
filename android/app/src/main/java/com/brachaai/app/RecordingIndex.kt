@@ -54,12 +54,24 @@ class RecordingIndex(private val file: File) {
         states.keys.toSet()
     }
 
-    fun put(name: String, state: RecordingState) {
-        synchronized(indexLock) {
-            val states = load()
-            states[name] = state
-            persist(states)
-        }
+    /**
+     * Records [state] for [name] and reports whether it actually reached disk.
+     *
+     * There is no in-memory cache behind this: a failed write is simply lost, and the next
+     * `stateOf` will report the recording as never attempted. That matters enough for the
+     * caller to be able to react, which is why this returns a value instead of `Unit`:
+     *
+     * - a lost `done = true` with delete-after-processing OFF means the recording is still
+     *   on disk, so the next sweep re-transcribes and **re-uploads** the same call;
+     * - a lost `stuck = true` means the recording is retried and re-notified forever
+     *   instead of staying given up on.
+     *
+     * Never throws — losing the index must not kill the pipeline.
+     */
+    fun put(name: String, state: RecordingState): Boolean = synchronized(indexLock) {
+        val states = load()
+        states[name] = state
+        persist(states)
     }
 
     /**
@@ -104,8 +116,11 @@ class RecordingIndex(private val file: File) {
         }
     }
 
-    /** Caller must hold [indexLock]. Never throws: losing the index must not kill the pipeline. */
-    private fun persist(states: Map<String, RecordingState>) {
+    /**
+     * Caller must hold [indexLock]. Never throws: losing the index must not kill the
+     * pipeline. Returns true only when the snapshot is on disk.
+     */
+    private fun persist(states: Map<String, RecordingState>): Boolean {
         val json = JSONObject()
         states.forEach { (name, state) ->
             json.put(
@@ -120,16 +135,21 @@ class RecordingIndex(private val file: File) {
         }
 
         val temp = File(file.parentFile, file.name + ".tmp")
-        try {
+        return try {
             file.parentFile?.mkdirs()
             temp.writeText(json.toString())
             Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "Could not persist recording index; state is in memory only this run", e)
+            // Nothing is cached in memory, so this state is not "kept for this run" — it is
+            // gone. The previous snapshot on disk (if any) is left exactly as it was by the
+            // temp-then-move, so the loss is limited to this one change.
+            Log.e(TAG, "Could not persist recording index; this change is lost, not held in memory", e)
             try {
                 if (temp.exists()) temp.delete()
             } catch (ignored: Exception) {
             }
+            false
         }
     }
 

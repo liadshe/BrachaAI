@@ -45,9 +45,10 @@ class PendingAudioQueue(
      *
      * Returns the outcome so the caller can tell a landed call from one that did not — in
      * particular, whether following up with a sweep of the rest of the queue is justified
-     * (see the caller in `CallMonitorService.handleNewFile`). [ProcessOutcome.Skipped] is
-     * also what comes back when the recording was already `done` or `stuck`: that is a
-     * terminal, not-a-failure result, not a signal about the network.
+     * (see the caller in `CallMonitorService.handleNewFile`).
+     * [ProcessOutcome.AlreadyHandled] comes back when the recording was already `done` or
+     * `stuck`, or when the entry is not an eligible recording at all: no attempt was made,
+     * nothing changed, and — unlike [ProcessOutcome.Skipped] — nothing may be deleted.
      */
     suspend fun processNow(file: File): ProcessOutcome {
         return mutex.withLock {
@@ -85,7 +86,7 @@ class PendingAudioQueue(
             index.pruneTo(entries.map { it.name }.toSet())
 
             val candidates = entries
-                .filter { it.isFile && !it.name.startsWith(".") }
+                .filter { isEligibleRecording(it) }
                 .sortedBy { it.name }
 
             val pending = candidates.filter { file ->
@@ -113,13 +114,32 @@ class PendingAudioQueue(
         }
     }
 
+    /**
+     * The one definition of what this queue will process, shared by both entry points.
+     *
+     * [sweep] filters the directory listing with it; [processOneLocked] enforces it again so
+     * `processNow` — which is handed whatever path `FileObserver` reported — cannot admit
+     * something a sweep would refuse. Without that, a recorder that writes `.pending_x.m4a`
+     * and renames it afterwards (or any stray file dropped in the folder) would get an index
+     * entry, five `RetryLater` attempts, and a user-facing "Could not process" notification
+     * for something that was never a call.
+     */
+    private fun isEligibleRecording(file: File): Boolean =
+        file.isFile && !file.name.startsWith(".")
+
     /** Caller must hold [mutex]. */
     private suspend fun processOneLocked(file: File): ProcessOutcome {
         val name = file.name
+        if (!isEligibleRecording(file)) {
+            // Before any index read or write: an ineligible entry must leave no trace.
+            Log.d(TAG, "Ignoring $name: not an eligible recording (hidden entry or directory)")
+            return ProcessOutcome.AlreadyHandled
+        }
+
         val before = index.stateOf(name)
         if (before.done || before.stuck) {
             Log.d(TAG, "Ignoring $name: already ${if (before.done) "done" else "given up on"}")
-            return ProcessOutcome.Skipped
+            return ProcessOutcome.AlreadyHandled
         }
 
         val outcome = processor.process(file)
@@ -127,12 +147,15 @@ class PendingAudioQueue(
             is ProcessOutcome.Completed, is ProcessOutcome.Skipped -> {
                 // attempts resets to 0: the entry now only records that this is finished, and
                 // a stale count would be misleading if the file is somehow seen again.
-                index.put(name, RecordingState(attempts = 0, done = true))
+                val persisted = index.put(name, RecordingState(attempts = 0, done = true))
+                reportLostTerminalState(persisted, name, done = true)
                 Log.i(TAG, "Finished $name ($outcome)")
             }
 
             is ProcessOutcome.GiveUp -> {
-                index.put(name, RecordingState(attempts = before.attempts + 1, stuck = true, lastError = outcome.reason))
+                val persisted =
+                    index.put(name, RecordingState(attempts = before.attempts + 1, stuck = true, lastError = outcome.reason))
+                reportLostTerminalState(persisted, name, done = false)
                 Log.e(TAG, "Giving up on $name: ${outcome.reason}. The recording is kept and will not be retried.")
                 notifyStuck(name, outcome.reason)
             }
@@ -140,16 +163,54 @@ class PendingAudioQueue(
             is ProcessOutcome.RetryLater -> {
                 val attempts = before.attempts + 1
                 if (attempts >= MAX_ATTEMPTS) {
-                    index.put(name, RecordingState(attempts = attempts, stuck = true, lastError = outcome.reason))
+                    val persisted =
+                        index.put(name, RecordingState(attempts = attempts, stuck = true, lastError = outcome.reason))
+                    reportLostTerminalState(persisted, name, done = false)
                     Log.e(TAG, "Giving up on $name after $attempts attempts: ${outcome.reason}. The recording is kept.")
                     notifyStuck(name, outcome.reason)
                 } else {
+                    // Deliberately not reported: a lost attempt count only costs one extra
+                    // retry, which is the safe direction. Only the terminal flags matter.
                     index.put(name, RecordingState(attempts = attempts, lastError = outcome.reason))
                     Log.w(TAG, "Attempt $attempts/$MAX_ATTEMPTS failed for $name: ${outcome.reason}")
                 }
             }
+
+            is ProcessOutcome.AlreadyHandled -> {
+                // No RecordingProcessor produces this — it is this class's own answer for a
+                // file it never handed over, returned above without reaching here. Listed so
+                // the `when` stays exhaustive over the sealed class, and deliberately writes
+                // nothing: an outcome that reports no attempt must not record one.
+                Log.w(TAG, "Processor returned AlreadyHandled for $name; recording nothing")
+            }
         }
         return outcome
+    }
+
+    /**
+     * Shouts when a *terminal* index flag never reached disk.
+     *
+     * [RecordingIndex] keeps nothing in memory, so a failed write is a lost write. That is
+     * harmless for an attempt count but not for `done`/`stuck`, and there is nothing this
+     * class can do about it beyond making the consequence visible in the log — retrying the
+     * write would fail for the same reason (a full or read-only disk).
+     */
+    private fun reportLostTerminalState(persisted: Boolean, name: String, done: Boolean) {
+        if (persisted) return
+        if (done) {
+            Log.e(
+                TAG,
+                "Could not persist done=true for $name. If the recording is still on disk " +
+                    "(delete-after-processing off, or the delete failed) the next sweep will " +
+                    "transcribe and upload this call a second time."
+            )
+        } else {
+            Log.e(
+                TAG,
+                "Could not persist stuck=true for $name. It will be retried on every sweep " +
+                    "and re-notified instead of staying given up on."
+            )
+        }
     }
 
     /** Never lets a notification failure break the sweep — the bookkeeping already happened. */
