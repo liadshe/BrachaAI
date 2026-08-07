@@ -115,11 +115,29 @@ posts the stuck notification.
 1. **A validated network becomes available.** The primary trigger, and the direct answer to
    "it failed because I was offline".
 2. **After any successful call upload.** A success proves both network and token are good.
-   Without this, a failure that happens *while online* — an OpenAI 429 or 5xx — would wait
-   for the next network state change, which on a phone that stays on Wi-Fi all day could be
-   many hours. This mirrors the existing `flushPending()` call on the upload success path.
+   This mirrors the existing `flushPending()` call on the upload success path.
 
-No periodic timer.
+3. **The existing six-hour loop.** Added after review, which showed triggers 1 and 2 left a
+   real hole: a transcription that fails *while online* — an OpenAI 429 or 5xx — on a phone
+   that stays on one network and takes no further calls is never retried, never reaches the
+   attempt cap, never marked stuck, and never reported. That is the original "kept but
+   forgotten" bug in a narrower window. This rides the briefing-sync loop that already runs
+   in this service, so it adds no timer and no wakeup. The sweep is placed *after* the loop's
+   delay rather than before: the first pass runs at service start, before `NetworkWatcher`
+   has established whether the network is usable, and `BootReceiver` restarts the service on
+   every boot, so sweeping there would burn an attempt off every pending recording on each
+   offline reboot.
+
+   This sweep is gated on the device currently having a validated connection, checked at call
+   time rather than from a cached flag. Ungated, it was itself a stranding bug: a phone
+   offline for around thirty hours would get five sweeps, burn all five attempts against a
+   network that was never there, and mark every pending recording `stuck` — kept and
+   notified, but never retried again. When connectivity cannot be determined at all, the
+   sweep runs anyway, because an unknown state must not silently disable the only backstop:
+   burning one attempt is recoverable, never retrying is not.
+
+   Triggers 1 and 2 need no such gate — the network callback fires only for a validated
+   network, and the post-upload sweep only runs after a call has actually landed.
 
 ### Deletion rule
 
