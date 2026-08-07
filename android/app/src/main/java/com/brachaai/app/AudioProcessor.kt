@@ -4,6 +4,7 @@ import android.media.MediaMetadataRetriever
 import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -84,12 +85,18 @@ class AudioProcessor(
     /**
      * Runs the full pipeline for one recording and reports how it ended.
      *
-     * Never throws. Callers used to have to catch, and a throw meant "recording kept but
-     * forgotten forever" — the bug this whole queue exists to fix.
+     * Does not throw for ordinary processing failures — callers used to have to catch, and a
+     * throw meant "recording kept but forgotten forever", the bug this whole queue exists to
+     * fix. Cancellation is the one exception to that: it still propagates, because a
+     * cancelled attempt is not a processing outcome at all (the service is shutting down, not
+     * failing), and swallowing it here would both misreport a clean shutdown as an error and
+     * defeat structured concurrency for the caller.
      */
     override suspend fun process(audioFile: File): ProcessOutcome = withContext(Dispatchers.IO) {
         val result = try {
             runPipeline(audioFile)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Unexpected failure processing ${audioFile.name}", e)
             PipelineResult(ProcessOutcome.RetryLater(e.message ?: e.javaClass.simpleName), false)
@@ -118,7 +125,7 @@ class AudioProcessor(
     }
 
     /**
-     * Maps a transcription failure onto an outcome.
+     * Maps a Whisper-pipeline failure onto an outcome.
      *
      * A [WhisperHttpException] with a permanently-invalid status means this file will never
      * transcribe, no matter how good the connection gets. Anything else — a rate limit, a
@@ -128,11 +135,15 @@ class AudioProcessor(
      * new build, and treating it as permanent would mark every recording stuck on its first
      * attempt with no way back.
      *
+     * [stage] names which OpenAI call failed ("transcription" or "correction") — it is passed
+     * in by the caller rather than guessed here, because both calls can throw the same
+     * [WhisperHttpException] and this function has no way to tell them apart on its own.
+     *
      * `internal` for the unit tests.
      */
-    internal fun outcomeForWhisperFailure(e: Exception): ProcessOutcome {
+    internal fun outcomeForWhisperFailure(e: Exception, stage: String): ProcessOutcome {
         val status = (e as? WhisperHttpException)?.statusCode
-        val reason = "transcription failed${status?.let { " (HTTP $it)" } ?: ""}: ${e.message}"
+        val reason = "$stage failed${status?.let { " (HTTP $it)" } ?: ""}: ${e.message}"
         return if (status != null && status in PERMANENT_TRANSCRIPTION_CODES) {
             ProcessOutcome.GiveUp(reason)
         } else {
@@ -178,14 +189,21 @@ class AudioProcessor(
             mp3File = converted
 
             println("4. Uploading MP3 to Whisper...")
+            val transcriptText = try {
+                whisperClient.transcribeAudio(converted)
+            } catch (e: Exception) {
+                val outcome = outcomeForWhisperFailure(e, "transcription")
+                Log.e(TAG, "Transcription failed for ${audioFile.name}: $outcome", e)
+                return PipelineResult(outcome, false)
+            }
+            println("5. Whisper Transcript: $transcriptText")
+
+            println("6. Correcting spelling and grammar...")
             val correctedTranscript = try {
-                val transcriptText = whisperClient.transcribeAudio(converted)
-                println("5. Whisper Transcript: $transcriptText")
-                println("6. Correcting spelling and grammar...")
                 whisperClient.correctSpelling(transcriptText)
             } catch (e: Exception) {
-                val outcome = outcomeForWhisperFailure(e)
-                Log.e(TAG, "Transcription failed for ${audioFile.name}: $outcome", e)
+                val outcome = outcomeForWhisperFailure(e, "correction")
+                Log.e(TAG, "Spelling correction failed for ${audioFile.name}: $outcome", e)
                 return PipelineResult(outcome, false)
             }
             println("7. Corrected Transcript: $correctedTranscript")
@@ -226,10 +244,24 @@ class AudioProcessor(
             return when (val uploadResult = attemptUpload(payload)) {
                 is UploadResult.Success -> {
                     println("SUCCESS! Data sent to backend")
-                    // Network and token both just proved good — the best possible moment to
-                    // also drain the transcript queue.
-                    flushPending()
-                    PipelineResult(ProcessOutcome.Completed, mayDeleteRecording = true)
+                    // The result is built before draining the queue, and deliberately
+                    // returned regardless of how the drain goes. The upload already landed;
+                    // flushPending() below is opportunistic housekeeping for OTHER queued
+                    // calls, and it suspends on a mutex and IO, both cancellation points. A
+                    // throw from it must never retract a success that already happened —
+                    // doing so would send this call back through the pipeline and re-upload
+                    // it a second time.
+                    val result = PipelineResult(ProcessOutcome.Completed, mayDeleteRecording = true)
+                    try {
+                        // Network and token both just proved good — the best possible moment
+                        // to also drain the transcript queue.
+                        flushPending()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Queue drain after a successful upload failed; the upload itself stands", e)
+                    }
+                    result
                 }
                 is UploadResult.Rejected -> {
                     // The call never reached the backend and never will, so the recording is

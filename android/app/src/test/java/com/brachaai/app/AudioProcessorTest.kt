@@ -265,13 +265,27 @@ class AudioProcessorTest {
         assertTrue(recording.exists())
     }
 
+    @Test
+    fun aGiveUpOutcomeIsNeverDeletedEvenIfTheFlagSaysItMayBe() {
+        // Same veto as above, but for GiveUp specifically: retryLaterNeverDeletes... and
+        // giveUpNeverDeletes... both pin mayDeleteRecording = false, so neither would catch a
+        // future edit that adds GiveUp to applyDeletion's terminalSuccess check. This is the
+        // one that would.
+        val recording = recordingIn("giveup-veto")
+        processorWithDeleteFlag(true).applyDeletion(
+            AudioProcessor.PipelineResult(ProcessOutcome.GiveUp("bad flag"), mayDeleteRecording = true),
+            recording
+        )
+        assertTrue(recording.exists())
+    }
+
     // ------------------------------------------------------- whisper status mapping
 
     @Test
     fun permanentWhisperStatusesGiveUp() {
         val processor = processorWithDeleteFlag(true)
         listOf(400, 413, 415, 422).forEach { code ->
-            val outcome = processor.outcomeForWhisperFailure(WhisperHttpException(code, "boom"))
+            val outcome = processor.outcomeForWhisperFailure(WhisperHttpException(code, "boom"), "transcription")
             assertTrue("HTTP $code should be permanent, got $outcome", outcome is ProcessOutcome.GiveUp)
         }
     }
@@ -282,7 +296,7 @@ class AudioProcessorTest {
         // 401/403 stay retryable on purpose: a bad or expired API key is fixed by a new
         // build, and marking every recording stuck on the first attempt would strand them all.
         listOf(401, 403, 429, 500, 502, 503).forEach { code ->
-            val outcome = processor.outcomeForWhisperFailure(WhisperHttpException(code, "boom"))
+            val outcome = processor.outcomeForWhisperFailure(WhisperHttpException(code, "boom"), "transcription")
             assertTrue("HTTP $code should be retryable, got $outcome", outcome is ProcessOutcome.RetryLater)
         }
     }
@@ -291,7 +305,7 @@ class AudioProcessorTest {
     fun aConnectionFailureRetries() {
         val processor = processorWithDeleteFlag(true)
 
-        val outcome = processor.outcomeForWhisperFailure(java.io.IOException("Unable to resolve host"))
+        val outcome = processor.outcomeForWhisperFailure(java.io.IOException("Unable to resolve host"), "transcription")
 
         assertTrue("being offline is the whole reason this queue exists", outcome is ProcessOutcome.RetryLater)
     }
