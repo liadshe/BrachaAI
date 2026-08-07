@@ -4,6 +4,7 @@ import android.media.MediaMetadataRetriever
 import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -33,7 +34,7 @@ class AudioProcessor(
      * the direction stays unknown, which is now a value the whole stack can carry.
      */
     private val callDirectionStore: CallDirectionStore? = null
-) {
+) : RecordingProcessor {
 
     private val whisperClient = WhisperApiClient(openAiApiKey)
 
@@ -67,156 +68,288 @@ class AudioProcessor(
         object Rejected : UploadResult()
     }
 
-    suspend fun processAndSendToBackend(audioFile: File) {
-        withContext(Dispatchers.IO) {
-            // Check duration: skip files shorter than 5 seconds
-            val retriever = MediaMetadataRetriever()
-            try {
-                retriever.setDataSource(audioFile.absolutePath)
-                val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                val durationMs = durationStr?.toLongOrNull() ?: 0L
-                if (durationMs in 1..4999) {
-                    println("Skipping ${audioFile.name}: duration too short ($durationMs ms)")
+    /**
+     * Result of one attempt, plus the separate question of whether the recording may go.
+     *
+     * These are two different questions and must not be collapsed. When the backend is
+     * unreachable but the transcript is durably queued, the outcome is [ProcessOutcome.Completed]
+     * — re-transcribing would spend money and enqueue the same call a second time — while
+     * `mayDeleteRecording` can still be false because `queuedTranscriptIsDurable` says the
+     * queue is not a trustworthy home for it.
+     */
+    internal data class PipelineResult(
+        val outcome: ProcessOutcome,
+        val mayDeleteRecording: Boolean
+    )
 
-                    // Delete the short file before exiting so it doesn't stay on the device forever
-                    deleteOriginalIfEnabled(audioFile)
+    /**
+     * Runs the full pipeline for one recording and reports how it ended.
+     *
+     * Does not throw for ordinary processing failures — callers used to have to catch, and a
+     * throw meant "recording kept but forgotten forever", the bug this whole queue exists to
+     * fix. Cancellation is the one exception to that: it still propagates, because a
+     * cancelled attempt is not a processing outcome at all (the service is shutting down, not
+     * failing), and swallowing it here would both misreport a clean shutdown as an error and
+     * defeat structured concurrency for the caller.
+     */
+    override suspend fun process(audioFile: File): ProcessOutcome = withContext(Dispatchers.IO) {
+        val result = try {
+            runPipeline(audioFile)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected failure processing ${audioFile.name}", e)
+            PipelineResult(ProcessOutcome.RetryLater(e.message ?: e.javaClass.simpleName), false)
+        }
+        applyDeletion(result, audioFile)
+        result.outcome
+    }
 
-                    return@withContext
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Duration check failed for ${audioFile.name}, proceeding anyway", e)
-            } finally {
-                try { retriever.release() } catch (e: Exception) {}
-            }
+    /**
+     * The single gate between a call that failed and a recording that is destroyed.
+     *
+     * Deletion requires *both* a terminal-success outcome and permission from the caller.
+     * The outcome check is not redundant with the flag: it means a future caller that
+     * miscomputes `mayDeleteRecording` still cannot destroy an unprocessed recording.
+     *
+     * [ProcessOutcome.AlreadyHandled] is deliberately absent from `terminalSuccess`, and must
+     * stay absent. It covers a recording that is already `stuck` as well as one that is
+     * already `done`; treating it as a success would let a call that never landed be
+     * destroyed. Only [ProcessOutcome.Completed] and [ProcessOutcome.Skipped] mean the call
+     * is accounted for.
+     *
+     * `internal` so the unit tests can drive every row of the outcome table directly.
+     */
+    internal fun applyDeletion(result: PipelineResult, audioFile: File) {
+        val terminalSuccess =
+            result.outcome is ProcessOutcome.Completed || result.outcome is ProcessOutcome.Skipped
+        if (terminalSuccess && result.mayDeleteRecording) {
+            deleteOriginalIfEnabled(audioFile)
+        } else {
+            println("Keeping ${audioFile.name}; outcome=${result.outcome}")
+        }
+    }
 
-            // Held outside the try so the finally can always clean it up. Previously the
-            // delete sat on the happy path only, so any throw below leaked the MP3 in
-            // cacheDir permanently.
-            var mp3File: File? = null
-            try {
-                println("1. Starting processing for: ${audioFile.name}")
+    /**
+     * Maps a Whisper-pipeline failure onto an outcome.
+     *
+     * A [WhisperHttpException] with a permanently-invalid status means this file will never
+     * transcribe, no matter how good the connection gets. Anything else — a rate limit, a
+     * 5xx, or a connection failure with no status at all — is worth another attempt.
+     *
+     * 401/403 are deliberately retryable: a bad or expired API key is fixed by shipping a
+     * new build, and treating it as permanent would mark every recording stuck on its first
+     * attempt with no way back.
+     *
+     * [stage] names which OpenAI call failed ("transcription" or "correction") — it is passed
+     * in by the caller rather than guessed here, because both calls can throw the same
+     * [WhisperHttpException] and this function has no way to tell them apart on its own.
+     *
+     * `internal` for the unit tests.
+     */
+    internal fun outcomeForWhisperFailure(e: Exception, stage: String): ProcessOutcome {
+        val status = (e as? WhisperHttpException)?.statusCode
+        val reason = "$stage failed${status?.let { " (HTTP $it)" } ?: ""}: ${e.message}"
+        return if (status != null && status in PERMANENT_TRANSCRIPTION_CODES) {
+            ProcessOutcome.GiveUp(reason)
+        } else {
+            ProcessOutcome.RetryLater(reason)
+        }
+    }
 
-                val parsedInfo = parseFilename(audioFile.name)
-                println("2. Parsed Info - Name: ${parsedInfo.contactName}, Date: ${parsedInfo.date}")
+    /**
+     * The answer for a recording whose filename [parseFilename] cannot read.
+     *
+     * `GiveUp`, not `RetryLater`: the name is a fixed property of the file, so every one of
+     * the five attempts would fail identically. `mayDeleteRecording = false` — the call never
+     * reached the backend, so the recording stays on disk for manual recovery, exactly as for
+     * any other `GiveUp`. Realistically this is a recorder app with a different naming
+     * scheme, in which case one notification naming the file is more use than five silent
+     * retries.
+     *
+     * `internal` for the unit tests.
+     */
+    internal fun unparseableFilenameResult(filename: String): PipelineResult = PipelineResult(
+        ProcessOutcome.GiveUp("filename is not ContactName_YYMMDD_HHMMSS: $filename"),
+        mayDeleteRecording = false
+    )
 
-                println("3. Converting audio to true MP3 format...")
-                val converted = convertToMp3(audioFile)
+    /**
+     * Turns one upload attempt into the pipeline's answer, with no IO of its own.
+     *
+     * Pulled out of [runPipeline] because this table — especially `Rejected` → `GiveUp` with
+     * the recording *kept* — is the branch's headline behaviour change, and inside the
+     * pipeline it sat behind FFmpeg and two OpenAI calls with no JVM seam, so nothing could
+     * test it. The network calls stay in [runPipeline]: this takes their results only.
+     *
+     * [enqueued] is the result of the [PendingUploadStore.enqueue] the caller already did on
+     * the Unauthenticated/Transient path, and is ignored on the other two.
+     *
+     * `internal` for the unit tests.
+     */
+    internal fun pipelineResultFor(uploadResult: UploadResult, enqueued: Boolean): PipelineResult =
+        when (uploadResult) {
+            is UploadResult.Success ->
+                PipelineResult(ProcessOutcome.Completed, mayDeleteRecording = true)
 
-                if (converted == null) {
-                    println("ERROR: Audio conversion failed. Stopping process.")
-                    return@withContext
-                }
-                mp3File = converted
+            is UploadResult.Rejected ->
+                // The call never reached the backend and never will, so the recording is the
+                // only copy of it. Kept forever, never retried. This used to delete.
+                PipelineResult(ProcessOutcome.GiveUp("backend rejected the payload"), mayDeleteRecording = false)
 
-                println("4. Uploading MP3 to Whisper...")
-                val transcriptText = whisperClient.transcribeAudio(converted)
-                println("5. Whisper Transcript: $transcriptText")
-
-                println("6. Correcting spelling and grammar...")
-                val correctedTranscript = whisperClient.correctSpelling(transcriptText)
-                println("7. Corrected Transcript: $correctedTranscript")
-
-                if (correctedTranscript.isBlank()) {
-                    // A GPT-4o refusal or filtered completion can return "" without throwing.
-                    // Uploading it would get a 400 from the backend (transcript required),
-                    // which is non-retryable and gets permanently deleted. Stop here instead
-                    // so nothing is ever uploaded or queued, and surface it via the existing
-                    // error-notification path (handleNewFile's catch in CallMonitorService).
-                    // Throwing here also means the recording survives, since the deletion
-                    // below is never reached.
-                    Log.e(TAG, "Corrected transcript is blank for ${audioFile.name}; not uploading or queuing")
-                    throw IllegalStateException("Transcript came back blank for ${audioFile.name}; not uploaded")
-                }
-
-                val callStartMillis = parsedInfo.toEpochMillis()
-                val callLogMatch = callStartMillis?.let { callerLookup.findNear(it) }
-                    ?: CallLogMatch.NONE
-                val callerNumber = callLogMatch.number
-
-                // Two sources, in order of authority. The call log is the platform's own
-                // record of the call, so it wins whenever it is readable; CallDirectionStore
-                // is the fallback for the case that made every call look incoming —
-                // READ_CALL_LOG denied, so the log says nothing at all. When neither knows,
-                // this stays null the whole way to the UI. Inventing "incoming" here is
-                // exactly the bug: an unknown direction was rendered as a definite one.
-                val callType = callLogMatch.callType
-                    ?: callStartMillis?.let { callDirectionStore?.directionNear(it) }
-                println("8. Caller number: ${callerNumber ?: "unavailable"}, type: ${callType ?: "unknown"}")
-
-                // The call log is the truth about the call; the recording is only the
-                // truth about the file. Prefer the former, fall back to the latter, and
-                // accept "unknown" over blocking an upload. Measured off the original
-                // recording rather than the converted MP3: the original is the
-                // authoritative artifact, and it is still guaranteed to exist here —
-                // deleteOriginalIfEnabled does not run until much later, well after this.
-                val callLengthSeconds = callLogMatch.durationSeconds
-                    ?: audioDuration.secondsOf(audioFile)
-                println("8b. Call length: ${callLengthSeconds?.let { "${it}s" } ?: "unknown"}")
-
-                val payload = PendingUpload(
-                    contactName = parsedInfo.contactName,
-                    date = "${parsedInfo.date}_${parsedInfo.time}",
-                    callerNumber = callerNumber,
-                    transcript = correctedTranscript,
-                    callLengthSeconds = callLengthSeconds,
-                    callType = callType
-                )
-
-                println("9. Sending data to backend...")
-                // Tracks whether the transcript actually landed somewhere durable. Starts
-                // true (Success/Rejected both leave the transcript durable, or moot in the
-                // Rejected case); the queued branch below defers to
-                // queuedTranscriptIsDurable, which flips it to false whenever the queue is
-                // not a trustworthy home for this transcript.
-                var transcriptIsDurable = true
-                val uploadResult = attemptUpload(payload)
-                when (uploadResult) {
-                    is UploadResult.Success -> {
-                        println("SUCCESS! Data sent to backend")
-                        // Network and token both just proved good — this is the best
-                        // possible moment to also retry anything sitting in the queue,
-                        // since a background recorder may never be reopened by the user.
-                        flushPending()
-                    }
-                    is UploadResult.Rejected -> {
-                        Log.e(TAG, "Backend permanently rejected upload for ${audioFile.name}; dropping, will not retry")
-                    }
-                    is UploadResult.Unauthenticated, is UploadResult.Transient -> {
-                        println("Upload failed; queued for retry")
-                        val queued = pendingStore.enqueue(payload)
-                        transcriptIsDurable = queuedTranscriptIsDurable(
-                            enqueued = queued,
+            is UploadResult.Unauthenticated, is UploadResult.Transient ->
+                if (!enqueued) {
+                    // Nothing was persisted anywhere, so the audio is still the only copy —
+                    // and re-transcribing later cannot produce a duplicate.
+                    PipelineResult(ProcessOutcome.RetryLater("transcript could not be queued"), false)
+                } else {
+                    // The transcript IS durably queued, so this recording is finished as far
+                    // as transcription goes — hence Completed. Whether the recording may also
+                    // be deleted is the separate, stricter question below.
+                    PipelineResult(
+                        ProcessOutcome.Completed,
+                        mayDeleteRecording = queuedTranscriptIsDurable(
+                            enqueued = true,
                             wasUnauthenticated = uploadResult is UploadResult.Unauthenticated
                         )
-                    }
+                    )
                 }
+        }
 
-                if (transcriptIsDurable) {
-                    // The transcript is durable in every branch that reaches here: the
-                    // backend took it, PendingUploadStore actually wrote it to disk for
-                    // retry, or it was permanently rejected (in which case re-processing the
-                    // same audio would produce the same transcript and the same rejection).
-                    // The recording has no further use, so honour the user's storage setting.
-                    deleteOriginalIfEnabled(audioFile)
-                } else {
-                    println("Keeping ${audioFile.name}; no durable copy of its transcript exists")
-                }
+    // suspend because it is called from a suspend context and does blocking IO on the IO
+    // dispatcher. It deliberately does NOT drain the transcript queue any more — see the
+    // comment on the upload block below.
+    private suspend fun runPipeline(audioFile: File): PipelineResult {
+        // Recordings under five seconds are deliberately not calls worth transcribing. That
+        // is a terminal decision, not a failure, so the recording may go.
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(audioFile.absolutePath)
+            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            val durationMs = durationStr?.toLongOrNull() ?: 0L
+            if (durationMs in 1..4999) {
+                println("Skipping ${audioFile.name}: duration too short ($durationMs ms)")
+                return PipelineResult(ProcessOutcome.Skipped, mayDeleteRecording = true)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Duration check failed for ${audioFile.name}, proceeding anyway", e)
+        } finally {
+            try { retriever.release() } catch (e: Exception) {}
+        }
 
+        var mp3File: File? = null
+        try {
+            println("1. Starting processing for: ${audioFile.name}")
+
+            val parsedInfo = try {
+                parseFilename(audioFile.name)
+            } catch (e: IllegalArgumentException) {
+                // Caught specifically rather than left to the general catch in process(),
+                // which would call it RetryLater: a name that does not match
+                // ContactName_YYMMDD_HHMMSS will not match on the fifth attempt either, so
+                // retrying only burns five attempts and then posts a misleading "Could not
+                // process" for a file that was never going to parse.
+                Log.e(TAG, "Unparseable recording filename ${audioFile.name}; no retry can fix it", e)
+                return unparseableFilenameResult(audioFile.name)
+            }
+            println("2. Parsed Info - Name: ${parsedInfo.contactName}, Date: ${parsedInfo.date}")
+
+            println("3. Converting audio to true MP3 format...")
+            val converted = convertToMp3(audioFile)
+            if (converted == null) {
+                // FFmpeg can fail on a partially-flushed recording that is fine minutes
+                // later, so this is retryable rather than terminal.
+                Log.e(TAG, "Audio conversion failed for ${audioFile.name}")
+                return PipelineResult(ProcessOutcome.RetryLater("audio conversion failed"), false)
+            }
+            mp3File = converted
+
+            println("4. Uploading MP3 to Whisper...")
+            val transcriptText = try {
+                whisperClient.transcribeAudio(converted)
             } catch (e: Exception) {
-                println("Error during processing: ${e.message}")
-                e.printStackTrace()
-                throw e
-            } finally {
-                val temp = mp3File
-                try {
-                    if (temp != null && temp.exists() && !temp.delete()) {
-                        Log.w(TAG, "Could not delete temp MP3 ${temp.name}")
-                    }
-                } catch (e: Exception) {
-                    // Must never replace an in-flight exception, or turn an otherwise-clean
-                    // run into an error notification, over a best-effort cache cleanup.
-                    Log.w(TAG, "Could not delete temp MP3 ${temp?.name}", e)
+                val outcome = outcomeForWhisperFailure(e, "transcription")
+                Log.e(TAG, "Transcription failed for ${audioFile.name}: $outcome", e)
+                return PipelineResult(outcome, false)
+            }
+            println("5. Whisper Transcript: $transcriptText")
+
+            println("6. Correcting spelling and grammar...")
+            val correctedTranscript = try {
+                whisperClient.correctSpelling(transcriptText)
+            } catch (e: Exception) {
+                val outcome = outcomeForWhisperFailure(e, "correction")
+                Log.e(TAG, "Spelling correction failed for ${audioFile.name}: $outcome", e)
+                return PipelineResult(outcome, false)
+            }
+            println("7. Corrected Transcript: $correctedTranscript")
+
+            if (correctedTranscript.isBlank()) {
+                // A GPT-4o refusal or filtered completion returns "" without throwing.
+                // Uploading it would earn a non-retryable 400, so stop here. Retryable
+                // because the same audio often corrects fine on a later attempt; the
+                // attempt counter stops it from running forever.
+                Log.e(TAG, "Corrected transcript is blank for ${audioFile.name}; not uploading or queuing")
+                return PipelineResult(ProcessOutcome.RetryLater("corrected transcript came back blank"), false)
+            }
+
+            val callStartMillis = parsedInfo.toEpochMillis()
+            val callLogMatch = callStartMillis?.let { callerLookup.findNear(it) } ?: CallLogMatch.NONE
+            val callerNumber = callLogMatch.number
+
+            // Two sources, in order of authority: the call log wins whenever it is readable,
+            // CallDirectionStore is the fallback for when READ_CALL_LOG was denied. When
+            // neither knows, this stays null all the way to the UI. Do not add a default.
+            val callType = callLogMatch.callType
+                ?: callStartMillis?.let { callDirectionStore?.directionNear(it) }
+            println("8. Caller number: ${callerNumber ?: "unavailable"}, type: ${callType ?: "unknown"}")
+
+            val callLengthSeconds = callLogMatch.durationSeconds ?: audioDuration.secondsOf(audioFile)
+            println("8b. Call length: ${callLengthSeconds?.let { "${it}s" } ?: "unknown"}")
+
+            val payload = PendingUpload(
+                contactName = parsedInfo.contactName,
+                date = "${parsedInfo.date}_${parsedInfo.time}",
+                callerNumber = callerNumber,
+                transcript = correctedTranscript,
+                callLengthSeconds = callLengthSeconds,
+                callType = callType
+            )
+
+            println("9. Sending data to backend...")
+            val uploadResult = attemptUpload(payload)
+            // The enqueue is the one side effect in this decision, so it stays out here next
+            // to the network call, leaving pipelineResultFor pure and testable.
+            //
+            // There is deliberately no flushPending() on the success path any more. This
+            // whole method runs with PendingAudioQueue's mutex held, and a drain walks up to
+            // PendingUploadStore.MAX_ENTRIES uploads at 30s connect / 60s read timeouts —
+            // worst case hours with the queue's lock held, blocking every processNow behind
+            // it. CallMonitorService now drains after processNow returns and after each
+            // sweep, i.e. once the lock is released.
+            val enqueued = when (uploadResult) {
+                is UploadResult.Success -> {
+                    println("SUCCESS! Data sent to backend")
+                    false
                 }
+                is UploadResult.Rejected -> {
+                    Log.e(TAG, "Backend permanently rejected upload for ${audioFile.name}; keeping the recording")
+                    false
+                }
+                is UploadResult.Unauthenticated, is UploadResult.Transient -> {
+                    println("Upload failed; queueing transcript for retry")
+                    pendingStore.enqueue(payload)
+                }
+            }
+            return pipelineResultFor(uploadResult, enqueued)
+        } finally {
+            val temp = mp3File
+            try {
+                if (temp != null && temp.exists() && !temp.delete()) {
+                    Log.w(TAG, "Could not delete temp MP3 ${temp.name}")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not delete temp MP3 ${temp?.name}", e)
             }
         }
     }
@@ -449,5 +582,12 @@ class AudioProcessor(
          * backend limit is raised) rather than treated as a reason to destroy the transcript.
          */
         private val NON_RETRYABLE_CODES = setOf(400, 422)
+
+        /**
+         * OpenAI statuses that mean this particular file will never transcribe — a better
+         * connection cannot help. 429 and 5xx are absent on purpose: they are about load,
+         * not about the file. So are 401/403 — see [outcomeForWhisperFailure].
+         */
+        private val PERMANENT_TRANSCRIPTION_CODES = setOf(400, 413, 415, 422)
     }
 }
