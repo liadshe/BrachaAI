@@ -13,7 +13,20 @@ import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class WhisperApiClient(private val apiKey: String) {
+/**
+ * A non-2xx answer from OpenAI, carrying the status so the caller can tell a transient
+ * failure (429, 5xx) from a permanent one (400, 413, 415, 422).
+ *
+ * A connection-level failure — the offline case — is deliberately NOT this type: there was
+ * no HTTP response, so there is no status, and callers key "retryable" off exactly that.
+ */
+class WhisperHttpException(val statusCode: Int, message: String) : IOException(message)
+
+class WhisperApiClient(
+    private val apiKey: String,
+    /** Injectable so the error mapping is testable against MockWebServer. */
+    private val baseUrl: String = "https://api.openai.com/v1"
+) {
 
     companion object {
         private const val TAG = "WhisperApiClient"
@@ -40,7 +53,7 @@ class WhisperApiClient(private val apiKey: String) {
 
         // 2. Build the request to OpenAI
         val request = Request.Builder()
-            .url("https://api.openai.com/v1/audio/transcriptions")
+            .url("$baseUrl/audio/transcriptions")
             .addHeader("Authorization", "Bearer $apiKey")
             .post(requestBody)
             .build()
@@ -50,8 +63,8 @@ class WhisperApiClient(private val apiKey: String) {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     val errorBody = response.body?.string()
-                    Log.e(TAG, "OpenAI Transcription Error: $errorBody")
-                    throw IOException("Unexpected code $response")
+                    Log.e(TAG, "OpenAI Transcription Error ${response.code}: $errorBody")
+                    throw WhisperHttpException(response.code, "Whisper transcription failed with HTTP ${response.code}")
                 }
 
                 val responseData = response.body?.string() ?: throw IOException("Empty response")
@@ -89,7 +102,7 @@ class WhisperApiClient(private val apiKey: String) {
         val requestBody = json.toString().toRequestBody("application/json".toMediaTypeOrNull())
 
         val request = Request.Builder()
-            .url("https://api.openai.com/v1/chat/completions")
+            .url("$baseUrl/chat/completions")
             .addHeader("Authorization", "Bearer $apiKey")
             .post(requestBody)
             .build()
@@ -98,8 +111,8 @@ class WhisperApiClient(private val apiKey: String) {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     val errorBody = response.body?.string()
-                    Log.e(TAG, "OpenAI GPT Error: $errorBody")
-                    throw IOException("Unexpected code $response")
+                    Log.e(TAG, "OpenAI GPT Error ${response.code}: $errorBody")
+                    throw WhisperHttpException(response.code, "Spelling correction failed with HTTP ${response.code}")
                 }
                 val data = response.body?.string() ?: ""
                 val jsonResponse = JSONObject(data)
