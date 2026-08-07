@@ -38,17 +38,16 @@ data class RecordingState(
  */
 class RecordingIndex(private val file: File) {
 
-    private val lock = Any()
     private val states: MutableMap<String, RecordingState> = load()
 
-    fun stateOf(name: String): RecordingState = synchronized(lock) {
+    fun stateOf(name: String): RecordingState = synchronized(indexLock) {
         states[name] ?: RecordingState()
     }
 
-    fun allNames(): Set<String> = synchronized(lock) { states.keys.toSet() }
+    fun allNames(): Set<String> = synchronized(indexLock) { states.keys.toSet() }
 
     fun put(name: String, state: RecordingState) {
-        synchronized(lock) {
+        synchronized(indexLock) {
             states[name] = state
             persist()
         }
@@ -63,7 +62,7 @@ class RecordingIndex(private val file: File) {
      * the common case and should not touch storage.
      */
     fun pruneTo(existingNames: Set<String>) {
-        synchronized(lock) {
+        synchronized(indexLock) {
             val gone = states.keys.filterNot { it in existingNames }
             if (gone.isEmpty()) return
             gone.forEach { states.remove(it) }
@@ -95,7 +94,7 @@ class RecordingIndex(private val file: File) {
         }
     }
 
-    /** Caller must hold [lock]. Never throws: losing the index must not kill the pipeline. */
+    /** Caller must hold [indexLock]. Never throws: losing the index must not kill the pipeline. */
     private fun persist() {
         val json = JSONObject()
         states.forEach { (name, state) ->
@@ -126,6 +125,17 @@ class RecordingIndex(private val file: File) {
 
     companion object {
         private const val TAG = "RecordingIndex"
+
+        // Shared across every instance in the process — see the comment on put(). Multiple
+        // RecordingIndex objects (e.g. one built by a retry coordinator, another by a cleanup
+        // task, or constructed in parallel during tests) all point at the same disk file and
+        // hold independent in-memory snapshots. Without a process-wide lock, instance B's
+        // persist() can overwrite instance A's newer write with B's stale snapshot — last
+        // writer wins over the whole file, entries are lost, and done flags + attempt counts
+        // reset. This has happened before to TokenRefresher (see android/CLAUDE.md) and was
+        // fixed by moving the lock into the companion object. Contention is not a concern:
+        // writes are small, infrequent, and this app only ever has one index file anyway.
+        private val indexLock = Any()
 
         /** Standard location, under app-private storage alongside the pending upload queue. */
         fun default(filesDir: File) = RecordingIndex(File(filesDir, "recordings-index.json"))

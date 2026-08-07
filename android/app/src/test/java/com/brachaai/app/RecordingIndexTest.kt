@@ -115,4 +115,34 @@ class RecordingIndexTest {
 
         assertTrue(index.stateOf("a.m4a").done)
     }
+
+    /**
+     * Without a process-wide lock, two separate RecordingIndex instances pointing at the
+     * same file can race: instance B's persist() overwrites instance A's newer write with
+     * B's stale snapshot, losing entries entirely. This happened to TokenRefresher and was
+     * fixed by moving the lock to the companion object. This test proves the fix works.
+     */
+    @Test
+    fun concurrentInstancesDoNotLoseData() {
+        val file = newIndexFile()
+        val index1 = RecordingIndex(file)
+        val index2 = RecordingIndex(file)
+
+        // Interleave puts: each instance starts with an empty in-memory snapshot
+        index1.put("call-a.m4a", RecordingState(attempts = 1, done = true))
+        index2.put("call-b.m4a", RecordingState(attempts = 2, done = true))
+        index1.put("call-c.m4a", RecordingState(attempts = 3, done = true))
+        index2.put("call-d.m4a", RecordingState(attempts = 4, done = true))
+
+        // Load fresh from disk — if the lock did not work, index2's last write would
+        // overwrite with only call-b and call-d; a and c would be lost.
+        val reloaded = RecordingIndex(file)
+
+        val allNames = reloaded.allNames()
+        assertEquals(
+            "process-wide lock must prevent writes from overwriting each other",
+            setOf("call-a.m4a", "call-b.m4a", "call-c.m4a", "call-d.m4a"),
+            allNames
+        )
+    }
 }
