@@ -12,6 +12,7 @@ import android.os.FileObserver
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -108,6 +109,15 @@ class CallMonitorService : Service() {
         serviceScope.launch {
             try {
                 pendingAudioQueue.sweep()
+                // Unconditional, unlike the sync in handleNewFile: sweep() returns Unit, so
+                // there is no outcome here to gate on — the service cannot tell whether this
+                // sweep actually landed a call or found nothing pending. A briefing fetch
+                // that turns up nothing new is just a cheap GET, and this is the only trigger
+                // for the feature's headline scenario: a call recorded while offline finally
+                // uploading once the network returns. Without this, that call's briefing
+                // would not refresh until the six-hour tick or the app next comes to the
+                // foreground.
+                briefingSync.syncNow()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sweep pending recordings", e)
             }
@@ -181,9 +191,8 @@ class CallMonitorService : Service() {
         serviceScope.launch {
             try {
                 val outcome = pendingAudioQueue.processNow(file)
-                // A success proves both network and token are good — the moment to retry
-                // anything stranded earlier. Deliberately after processNow returns: the
-                // queue's mutex is not reentrant, so sweeping from inside would deadlock.
+                // Deliberately after processNow returns: the queue's mutex is not reentrant,
+                // so sweeping from inside would deadlock.
                 //
                 // Guarded on Completed rather than run unconditionally: processNow no longer
                 // throws on an ordinary failure, so an offline call comes back RetryLater, not
@@ -191,19 +200,36 @@ class CallMonitorService : Service() {
                 // recording with the same no-network condition that just failed this one,
                 // burning one of their five attempts for nothing — five offline calls would
                 // drive every pending recording to stuck, exactly the data loss this queue
-                // exists to prevent. Only a landed call (Completed) is evidence that the
-                // network and the token are actually good right now.
+                // exists to prevent.
+                //
+                // Completed is not, by itself, proof the network and token are both good —
+                // it also covers "delivery failed but the transcript is durably queued"
+                // (queuedTranscriptIsDurable), which happens precisely when the backend is
+                // unreachable. Sweeping on that Completed re-transcribes every other pending
+                // recording — real OpenAI spend — against a backend that may still be down.
+                // That costs money, not data or an attempt, so the gate stays on Completed;
+                // this comment exists so the next reader doesn't read this as "network is
+                // confirmed good" and rely on that elsewhere.
                 if (outcome is ProcessOutcome.Completed) {
                     // The call that just uploaded produces a new summary and new tasks.
                     briefingSync.syncNow()
                     sweepPendingAudio()
                 }
+            } catch (e: CancellationException) {
+                // Not a processing failure — the service is shutting down (serviceScope.cancel()
+                // in onDestroy). AudioProcessor.process rethrows cancellation for the same
+                // reason: swallowing it here would misreport a clean shutdown as a failure and
+                // post a bogus "Failed to process" notification on every stop.
+                throw e
             } catch (e: Exception) {
-                // processNow no longer throws for ordinary processing failures — those are
+                // processNow does not throw for ordinary processing failures — those are
                 // recorded in the index and, if terminal, reported via notifyStuck instead.
-                // This catch is for genuinely unexpected failures outside that policy (e.g.
-                // the watch directory vanishing, a dead index), so it stays even though the
-                // ordinary-failure path that used to land here no longer does.
+                // Nor does anything reachable from here throw for a corrupt index or a missing
+                // watch directory; RecordingIndex swallows its own read/write failures. This
+                // catch is a last-resort guard for genuinely unexpected runtime failures, not
+                // for any specific cause — with CancellationException carved out above, there
+                // is currently no known failure that reaches it, and that is the point: it
+                // exists for whatever the next one turns out to be.
                 Log.e(TAG, "Failed to process ${file.name}", e)
                 notifyError(file.name, e.message ?: "Unknown error")
             }
