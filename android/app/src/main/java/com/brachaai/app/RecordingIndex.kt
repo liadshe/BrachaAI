@@ -35,21 +35,30 @@ data class RecordingState(
  * Every failure mode here degrades to "nothing is known", which is the safe direction. The
  * cost of forgetting is re-transcribing a call; the cost of wrongly remembering would be
  * deleting a recording that never landed.
+ *
+ * The file is the single source of truth — every operation loads, applies the change, and
+ * writes back inside a process-wide lock. This prevents concurrent instances from holding
+ * stale in-memory snapshots that overwrite each other on disk. Multiple RecordingIndex
+ * objects over the same file all serialize against every other through [indexLock], so
+ * writes from instance A cannot be lost to instance B's stale snapshot.
  */
 class RecordingIndex(private val file: File) {
 
-    private val states: MutableMap<String, RecordingState> = load()
-
     fun stateOf(name: String): RecordingState = synchronized(indexLock) {
+        val states = load()
         states[name] ?: RecordingState()
     }
 
-    fun allNames(): Set<String> = synchronized(indexLock) { states.keys.toSet() }
+    fun allNames(): Set<String> = synchronized(indexLock) {
+        val states = load()
+        states.keys.toSet()
+    }
 
     fun put(name: String, state: RecordingState) {
         synchronized(indexLock) {
+            val states = load()
             states[name] = state
-            persist()
+            persist(states)
         }
     }
 
@@ -63,11 +72,12 @@ class RecordingIndex(private val file: File) {
      */
     fun pruneTo(existingNames: Set<String>) {
         synchronized(indexLock) {
+            val states = load()
             val gone = states.keys.filterNot { it in existingNames }
             if (gone.isEmpty()) return
             gone.forEach { states.remove(it) }
             Log.d(TAG, "Pruned ${gone.size} index entr(ies) whose recording is gone")
-            persist()
+            persist(states)
         }
     }
 
@@ -95,7 +105,7 @@ class RecordingIndex(private val file: File) {
     }
 
     /** Caller must hold [indexLock]. Never throws: losing the index must not kill the pipeline. */
-    private fun persist() {
+    private fun persist(states: Map<String, RecordingState>) {
         val json = JSONObject()
         states.forEach { (name, state) ->
             json.put(
@@ -126,15 +136,15 @@ class RecordingIndex(private val file: File) {
     companion object {
         private const val TAG = "RecordingIndex"
 
-        // Shared across every instance in the process — see the comment on put(). Multiple
-        // RecordingIndex objects (e.g. one built by a retry coordinator, another by a cleanup
-        // task, or constructed in parallel during tests) all point at the same disk file and
-        // hold independent in-memory snapshots. Without a process-wide lock, instance B's
-        // persist() can overwrite instance A's newer write with B's stale snapshot — last
-        // writer wins over the whole file, entries are lost, and done flags + attempt counts
-        // reset. This has happened before to TokenRefresher (see android/CLAUDE.md) and was
-        // fixed by moving the lock into the companion object. Contention is not a concern:
-        // writes are small, infrequent, and this app only ever has one index file anyway.
+        // Shared across every instance in the process. Multiple RecordingIndex objects
+        // pointing at the same file each read, apply changes, and write back inside this
+        // lock, so the file is the single source of truth and no instance can lose another
+        // instance's writes. Without a process-wide lock, instance B could hold a stale
+        // in-memory snapshot and persist() it over instance A's newer write — last-writer
+        // wins over the whole file, entries are lost. This happened before to TokenRefresher
+        // (see android/CLAUDE.md) and was fixed by moving the lock into the companion object.
+        // Contention is not a concern: writes are small, infrequent, and this app only ever
+        // has one index file anyway.
         private val indexLock = Any()
 
         /** Standard location, under app-private storage alongside the pending upload queue. */

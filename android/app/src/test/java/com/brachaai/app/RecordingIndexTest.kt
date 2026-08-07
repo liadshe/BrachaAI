@@ -106,21 +106,38 @@ class RecordingIndexTest {
 
     @Test
     fun survivesAnUnwritableIndexPathWithoutThrowing() {
-        // The parent is a regular file, so every write must fail. Losing the index is
-        // survivable (recordings get re-processed); throwing here would kill the pipeline.
+        // The parent is a regular file, so every write must fail. The state cannot be
+        // persisted, so a fresh load has no knowledge of it. Losing the index is survivable
+        // (recordings get re-processed, which costs a re-transcription but never deletes
+        // one); throwing here would kill the pipeline. The guarantee is that put() completes
+        // without exception, even if the write fails — the cost is re-processing, which is
+        // the safe direction.
         val blocker = tempFolder.newFile("not-a-directory")
         val index = RecordingIndex(File(blocker, "recordings.json"))
 
         index.put("a.m4a", RecordingState(done = true))
 
-        assertTrue(index.stateOf("a.m4a").done)
+        assertFalse("a failed write must not report a persisted state", index.stateOf("a.m4a").done)
     }
 
     /**
-     * Without a process-wide lock, two separate RecordingIndex instances pointing at the
-     * same file can race: instance B's persist() overwrites instance A's newer write with
-     * B's stale snapshot, losing entries entirely. This happened to TokenRefresher and was
-     * fixed by moving the lock to the companion object. This test proves the fix works.
+     * Without file-as-source-of-truth, two separate RecordingIndex instances pointing at
+     * the same file hold independent in-memory snapshots loaded once at construction. Even
+     * with a process-wide lock on persist(), instance B's write overwrites instance A's with
+     * B's stale snapshot, losing entries entirely. Trace the old code:
+     *   index1.states = {}; index2.states = {}
+     *   index1.put("a") → lock, states1["a"]=state, persist(states1={a}), unlock. file={a}
+     *   index2.put("b") → lock, states2["b"]=state, persist(states2={b}), unlock. file={b}  (lost a!)
+     *   index1.put("c") → lock, states1["c"]=state, persist(states1={a,c}), unlock. file={a,c}
+     *   index2.put("d") → lock, states2["d"]=state, persist(states2={b,d}), unlock. file={b,d}  (lost a,c!)
+     *   fresh.allNames() loads {b,d}, test fails.
+     *
+     * With file-as-source-of-truth, each operation loads fresh inside the lock:
+     *   index1.put("a") → lock, load {}, add "a"→{a}, persist, unlock. file={a}
+     *   index2.put("b") → lock, load {a}, add "b"→{a,b}, persist, unlock. file={a,b}
+     *   index1.put("c") → lock, load {a,b}, add "c"→{a,b,c}, persist, unlock. file={a,b,c}
+     *   index2.put("d") → lock, load {a,b,c}, add "d"→{a,b,c,d}, persist, unlock. file={a,b,c,d}
+     *   fresh.allNames() loads {a,b,c,d}, test passes.
      */
     @Test
     fun concurrentInstancesDoNotLoseData() {
@@ -128,19 +145,18 @@ class RecordingIndexTest {
         val index1 = RecordingIndex(file)
         val index2 = RecordingIndex(file)
 
-        // Interleave puts: each instance starts with an empty in-memory snapshot
+        // Interleave puts from two instances
         index1.put("call-a.m4a", RecordingState(attempts = 1, done = true))
         index2.put("call-b.m4a", RecordingState(attempts = 2, done = true))
         index1.put("call-c.m4a", RecordingState(attempts = 3, done = true))
         index2.put("call-d.m4a", RecordingState(attempts = 4, done = true))
 
-        // Load fresh from disk — if the lock did not work, index2's last write would
-        // overwrite with only call-b and call-d; a and c would be lost.
+        // Load fresh from disk — must have all entries
         val reloaded = RecordingIndex(file)
 
         val allNames = reloaded.allNames()
         assertEquals(
-            "process-wide lock must prevent writes from overwriting each other",
+            "file-as-source-of-truth guarantees no entries are lost to concurrent writes",
             setOf("call-a.m4a", "call-b.m4a", "call-c.m4a", "call-d.m4a"),
             allNames
         )
