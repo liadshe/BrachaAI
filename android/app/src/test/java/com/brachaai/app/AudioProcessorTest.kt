@@ -180,4 +180,119 @@ class AudioProcessorTest {
             processor.queuedTranscriptIsDurable(enqueued = true, wasUnauthenticated = false)
         )
     }
+
+    // ------------------------------------------------------------ applyDeletion
+    //
+    // The single gate between a failed call and a destroyed recording. Every row of the
+    // spec's outcome table is asserted here, because this is the only place that decides.
+
+    private fun recordingIn(name: String): File =
+        File(tempFolder.newFolder(name), "call.m4a").apply { parentFile?.mkdirs(); writeText("audio") }
+
+    private fun processorWithDeleteFlag(delete: Boolean): AudioProcessor {
+        val settingsStore = SettingsStore(RuntimeEnvironment.getApplication())
+        settingsStore.deleteAudioAfterProcessing = delete
+        return newProcessor(settingsStore)
+    }
+
+    @Test
+    fun completedAndDeletableHonoursTheDeleteSetting() {
+        val recording = recordingIn("completed-on")
+        processorWithDeleteFlag(true).applyDeletion(
+            AudioProcessor.PipelineResult(ProcessOutcome.Completed, mayDeleteRecording = true), recording
+        )
+        assertFalse("a landed call with the setting on should be deleted", recording.exists())
+    }
+
+    @Test
+    fun completedButSettingOffKeepsTheRecording() {
+        val recording = recordingIn("completed-off")
+        processorWithDeleteFlag(false).applyDeletion(
+            AudioProcessor.PipelineResult(ProcessOutcome.Completed, mayDeleteRecording = true), recording
+        )
+        assertTrue(recording.exists())
+    }
+
+    @Test
+    fun skippedShortRecordingHonoursTheDeleteSetting() {
+        val recording = recordingIn("skipped")
+        processorWithDeleteFlag(true).applyDeletion(
+            AudioProcessor.PipelineResult(ProcessOutcome.Skipped, mayDeleteRecording = true), recording
+        )
+        assertFalse("a deliberately skipped recording is finished, not failed", recording.exists())
+    }
+
+    @Test
+    fun completedButNotDurablyQueuedKeepsTheRecordingEvenWithTheSettingOn() {
+        // The transcript is queued (so it must not be re-transcribed) but the queue is not a
+        // trustworthy home for it, so the recording is the only real copy.
+        val recording = recordingIn("completed-not-durable")
+        processorWithDeleteFlag(true).applyDeletion(
+            AudioProcessor.PipelineResult(ProcessOutcome.Completed, mayDeleteRecording = false), recording
+        )
+        assertTrue(recording.exists())
+    }
+
+    @Test
+    fun retryLaterNeverDeletesEvenWithTheSettingOn() {
+        val recording = recordingIn("retry")
+        processorWithDeleteFlag(true).applyDeletion(
+            AudioProcessor.PipelineResult(ProcessOutcome.RetryLater("no internet"), mayDeleteRecording = false),
+            recording
+        )
+        assertTrue("an unprocessed recording must survive regardless of the setting", recording.exists())
+    }
+
+    @Test
+    fun giveUpNeverDeletesEvenWithTheSettingOn() {
+        val recording = recordingIn("giveup")
+        processorWithDeleteFlag(true).applyDeletion(
+            AudioProcessor.PipelineResult(ProcessOutcome.GiveUp("backend rejected it"), mayDeleteRecording = false),
+            recording
+        )
+        assertTrue("giving up is not permission to destroy the only copy", recording.exists())
+    }
+
+    @Test
+    fun aFailureOutcomeIsNeverDeletedEvenIfTheFlagSaysItMayBe() {
+        // Belt and braces: the outcome alone must be able to veto deletion, so a future
+        // caller that miscomputes the flag cannot destroy a recording.
+        val recording = recordingIn("veto")
+        processorWithDeleteFlag(true).applyDeletion(
+            AudioProcessor.PipelineResult(ProcessOutcome.RetryLater("bad flag"), mayDeleteRecording = true),
+            recording
+        )
+        assertTrue(recording.exists())
+    }
+
+    // ------------------------------------------------------- whisper status mapping
+
+    @Test
+    fun permanentWhisperStatusesGiveUp() {
+        val processor = processorWithDeleteFlag(true)
+        listOf(400, 413, 415, 422).forEach { code ->
+            val outcome = processor.outcomeForWhisperFailure(WhisperHttpException(code, "boom"))
+            assertTrue("HTTP $code should be permanent, got $outcome", outcome is ProcessOutcome.GiveUp)
+        }
+    }
+
+    @Test
+    fun transientWhisperStatusesRetry() {
+        val processor = processorWithDeleteFlag(true)
+        // 401/403 stay retryable on purpose: a bad or expired API key is fixed by a new
+        // build, and marking every recording stuck on the first attempt would strand them all.
+        listOf(401, 403, 429, 500, 502, 503).forEach { code ->
+            val outcome = processor.outcomeForWhisperFailure(WhisperHttpException(code, "boom"))
+            assertTrue("HTTP $code should be retryable, got $outcome", outcome is ProcessOutcome.RetryLater)
+        }
+    }
+
+    @Test
+    fun aConnectionFailureRetries() {
+        val processor = processorWithDeleteFlag(true)
+
+        val outcome = processor.outcomeForWhisperFailure(java.io.IOException("Unable to resolve host"))
+
+        assertTrue("being offline is the whole reason this queue exists", outcome is ProcessOutcome.RetryLater)
+    }
 }

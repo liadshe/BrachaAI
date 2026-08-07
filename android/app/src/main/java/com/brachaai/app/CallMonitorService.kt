@@ -157,7 +157,7 @@ class CallMonitorService : Service() {
     private fun handleNewFile(file: File) {
         serviceScope.launch {
             try {
-                audioProcessor.processAndSendToBackend(file)
+                audioProcessor.process(file)
                 // The call that just uploaded produces a new summary and new tasks.
                 briefingSync.syncNow()
             } catch (e: Exception) {
