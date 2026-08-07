@@ -29,7 +29,12 @@ class PendingAudioQueue(
      * the coroutine forever rather than throw.
      */
     private val onStuck: (String, String) -> Unit = { _, _ -> },
-    private val nowMs: () -> Long = System::currentTimeMillis
+    private val nowMs: () -> Long = System::currentTimeMillis,
+    /**
+     * Marker file whose existence means the first-run baseline has been taken. Its contents
+     * are irrelevant; only whether it exists. See [adoptPreExistingRecordingsLocked].
+     */
+    private val baselineMarker: File = File(watchDir.parentFile, ".bracha-baseline")
 ) {
 
     // Serializes every attempt in the process. Without it a sweep triggered by the network
@@ -52,6 +57,10 @@ class PendingAudioQueue(
      */
     suspend fun processNow(file: File): ProcessOutcome {
         return mutex.withLock {
+            // Take the baseline first so a call arriving before the first sweep cannot cause
+            // the folder to be adopted around it. The file this call is about is excluded
+            // from adoption by name — the observer saw it close, so it is genuinely new.
+            adoptPreExistingRecordingsLocked(except = file.name)
             processOneLocked(file)
         }
     }
@@ -78,6 +87,8 @@ class PendingAudioQueue(
                 Log.e(TAG, "Cannot list $watchDir; skipping this sweep without touching the index")
                 return@withLock
             }
+
+            adoptPreExistingRecordingsLocked(except = null)
 
             // Prune against every entry actually present, not just the ones eligible for
             // processing below — otherwise a hidden file (or any other entry excluded from
@@ -126,6 +137,75 @@ class PendingAudioQueue(
      */
     private fun isEligibleRecording(file: File): Boolean =
         file.isFile && !file.name.startsWith(".")
+
+    /**
+     * Marks every recording already in the watch directory as handled, without transcribing
+     * any of it — once, the first time this queue ever runs on a device.
+     *
+     * Without this, the queue is a mass-backfill machine. [sweep] processes every eligible
+     * file that has no index entry, and on a fresh install the index is empty, so the first
+     * sweep transcribes and uploads *the user's entire recording history* — including calls
+     * recorded long before the app was installed. On a phone with hundreds of old recordings
+     * that is hundreds of Whisper charges and a call list flooded with years-old calls. The
+     * trigger fires immediately too: `NetworkWatcher` delivers a callback for the
+     * already-connected network as soon as the service starts.
+     *
+     * The queue's job is calls recorded *while the app is watching*. Anything already sitting
+     * in the folder when it first looks predates that, and is adopted as finished business.
+     *
+     * This also contains the blast radius when the index is lost — cleared app data, or a
+     * snapshot that fails to parse. Previously that meant every recording still on disk was
+     * re-transcribed and re-uploaded; now the marker survives independently, and if it is
+     * gone too the folder is re-adopted rather than re-processed. A genuinely pending
+     * recording present at that moment is silently adopted and never transcribed, which is
+     * the deliberate trade: one lost call beats re-uploading every call on the device.
+     *
+     * [except] is the recording `processNow` was just handed. `FileObserver` saw it close, so
+     * it is new by definition and must not be adopted by a baseline that happens to run first.
+     *
+     * Caller must hold [mutex].
+     */
+    private fun adoptPreExistingRecordingsLocked(except: String?) {
+        if (baselineMarker.exists()) return
+
+        val existing = listEntries()
+        if (existing == null) {
+            // Cannot see the directory, so cannot know what predates us. Taking the baseline
+            // now would adopt nothing and then mark us as having looked, so the real contents
+            // would be swept as if new the moment the directory becomes readable — the exact
+            // mass upload this guards against. Try again next time instead.
+            Log.w(TAG, "Cannot list $watchDir; deferring the first-run baseline")
+            return
+        }
+
+        val adopted = existing
+            .filter { isEligibleRecording(it) && it.name != except }
+            .associate { it.name to RecordingState(done = true) }
+
+        if (adopted.isNotEmpty() && !index.putAll(adopted)) {
+            // The adoption did not reach disk. Marking the baseline as taken anyway would
+            // leave those recordings with no index entry and no second chance to adopt them,
+            // so the next sweep would upload the lot. Leave the marker unwritten and retry.
+            Log.e(TAG, "Could not persist the first-run baseline; leaving it untaken so it retries")
+            return
+        }
+
+        val marked = try {
+            baselineMarker.parentFile?.mkdirs()
+            baselineMarker.createNewFile() || baselineMarker.exists()
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not write the baseline marker ${baselineMarker.name}", e)
+            false
+        }
+
+        if (marked) {
+            Log.i(TAG, "First run: adopted ${adopted.size} pre-existing recording(s) as handled; they will never be transcribed")
+        } else {
+            // Harmless: the index entries above already stop these being processed, and the
+            // next run simply re-adopts the same files, which is idempotent.
+            Log.w(TAG, "Adopted ${adopted.size} pre-existing recording(s) but could not mark the baseline; it will run again")
+        }
+    }
 
     /** Caller must hold [mutex]. */
     private suspend fun processOneLocked(file: File): ProcessOutcome {

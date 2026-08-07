@@ -75,6 +75,23 @@ class RecordingIndex(private val file: File) {
     }
 
     /**
+     * Records every entry in [newStates] in a single load-and-write.
+     *
+     * Exists for the first-run baseline, which marks every pre-existing recording at once.
+     * Doing that through [put] would reload and rewrite the whole file per recording — on a
+     * phone with hundreds of old calls that is hundreds of parses of a file that is itself
+     * growing with each write.
+     *
+     * Never throws. Returns whether the batch reached disk.
+     */
+    fun putAll(newStates: Map<String, RecordingState>): Boolean = synchronized(indexLock) {
+        if (newStates.isEmpty()) return true
+        val states = load()
+        states.putAll(newStates)
+        persist(states)
+    }
+
+    /**
      * Drops every entry whose recording is no longer on disk, so the index cannot outgrow
      * the watch directory. Covers both the ordinary case (delete-after-processing removed
      * the file) and the user clearing the folder by hand.

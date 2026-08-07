@@ -79,6 +79,48 @@ class RecordingIndexTest {
     }
 
     @Test
+    fun putAllWritesEveryEntryInOnePassAndKeepsWhatWasAlreadyThere() {
+        // Used by the first-run baseline, which adopts a whole folder of pre-existing
+        // recordings at once; doing that through put() would rewrite the file per recording.
+        val file = newIndexFile()
+        val index = RecordingIndex(file)
+        index.put("already-known.m4a", RecordingState(attempts = 2))
+
+        assertTrue(
+            index.putAll(
+                mapOf(
+                    "old-1.m4a" to RecordingState(done = true),
+                    "old-2.m4a" to RecordingState(done = true)
+                )
+            )
+        )
+
+        val reloaded = RecordingIndex(file)
+        assertTrue(reloaded.stateOf("old-1.m4a").done)
+        assertTrue(reloaded.stateOf("old-2.m4a").done)
+        assertEquals(2, reloaded.stateOf("already-known.m4a").attempts)
+    }
+
+    @Test
+    fun putAllReportsFailureWhenTheIndexCannotBeWritten() {
+        // The baseline must be able to tell that adoption did not land — claiming the
+        // baseline anyway would leave those recordings with no entry and no second chance,
+        // so the next sweep would upload the lot.
+        val blocker = tempFolder.newFile("not-a-directory")
+        val index = RecordingIndex(File(blocker, "recordings.json"))
+
+        assertFalse(index.putAll(mapOf("old.m4a" to RecordingState(done = true))))
+    }
+
+    @Test
+    fun putAllOfNothingIsASuccessfulNoOp() {
+        val file = newIndexFile()
+
+        assertTrue(RecordingIndex(file).putAll(emptyMap()))
+        assertFalse("an empty batch must not create the file", file.exists())
+    }
+
+    @Test
     fun pruneDropsEntriesWhoseFileIsGoneAndKeepsTheRest() {
         val file = newIndexFile()
         val index = RecordingIndex(file)

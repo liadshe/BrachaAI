@@ -37,6 +37,7 @@ class PendingAudioQueueTest {
 
     private lateinit var watchDir: File
     private lateinit var index: RecordingIndex
+    private lateinit var baselineMarker: File
     private val stuckNotifications = mutableListOf<Pair<String, String>>()
 
     // Every recording is created well in the past, so the "still being written" guard never
@@ -47,10 +48,24 @@ class PendingAudioQueueTest {
             setLastModified(FIXED_NOW - 60_000)
         }
 
-    /** Must be called first in every test — [newQueue] and [recording] both depend on it. */
+    /**
+     * Must be called first in every test — [newQueue] and [recording] both depend on it.
+     *
+     * The baseline marker is created up front, i.e. every test runs as a device that has
+     * already been watching for a while. Without that, the first-run baseline would adopt
+     * each test's own fixtures as pre-existing history and nothing would ever be processed.
+     * The tests that exercise the baseline itself delete it explicitly.
+     */
     private fun setUpDirs() {
         watchDir = tempFolder.newFolder("recordings")
-        index = RecordingIndex(File(tempFolder.newFolder("state"), "recordings-index.json"))
+        val stateDir = tempFolder.newFolder("state")
+        index = RecordingIndex(File(stateDir, "recordings-index.json"))
+        baselineMarker = File(stateDir, "recordings-baseline").apply { writeText("") }
+    }
+
+    /** Puts the device back to "app has never run here", so the next call takes the baseline. */
+    private fun clearBaseline() {
+        assertTrue(baselineMarker.delete())
     }
 
     private fun newQueue(processor: RecordingProcessor) = PendingAudioQueue(
@@ -58,8 +73,90 @@ class PendingAudioQueueTest {
         index = index,
         processor = processor,
         onStuck = { name, reason -> stuckNotifications += name to reason },
-        nowMs = { FIXED_NOW }
+        nowMs = { FIXED_NOW },
+        baselineMarker = baselineMarker
     )
+
+    // ------------------------------------------------------------ first-run baseline
+    //
+    // The queue processes anything in the watch directory without an index entry. On a fresh
+    // install the index is empty, so without a baseline the first sweep transcribes and
+    // uploads the user's entire recording history — including calls made long before the app
+    // existed. These pin the guard against that.
+
+    @Test
+    fun theFirstRunAdoptsEveryPreExistingRecordingWithoutTranscribingAny() = runBlocking {
+        setUpDirs()
+        clearBaseline()
+        val processor = FakeProcessor(ProcessOutcome.Completed)
+        val queue = newQueue(processor)
+        recording("old-call-1.m4a")
+        recording("old-call-2.m4a")
+        recording("old-call-3.m4a")
+
+        queue.sweep()
+
+        assertTrue("history predates the app and must never be uploaded", processor.seen.isEmpty())
+        assertTrue(index.stateOf("old-call-1.m4a").done)
+        assertTrue(index.stateOf("old-call-2.m4a").done)
+        assertTrue(index.stateOf("old-call-3.m4a").done)
+        assertTrue("the baseline must be recorded so it never runs again", baselineMarker.exists())
+    }
+
+    @Test
+    fun aRecordingMadeAfterTheBaselineIsStillProcessed() = runBlocking {
+        setUpDirs()
+        clearBaseline()
+        val processor = FakeProcessor(ProcessOutcome.Completed)
+        val queue = newQueue(processor)
+        recording("old-call.m4a")
+        queue.sweep()
+        assertTrue(processor.seen.isEmpty())
+
+        // A call arriving after the app started watching is exactly what this queue is for.
+        recording("new-call.m4a")
+        queue.sweep()
+
+        assertEquals(listOf("new-call.m4a"), processor.seen)
+    }
+
+    @Test
+    fun theBaselineNeverSwallowsTheRecordingTheObserverJustReported() = runBlocking {
+        setUpDirs()
+        clearBaseline()
+        val processor = FakeProcessor(ProcessOutcome.Completed)
+        val queue = newQueue(processor)
+        recording("old-call.m4a")
+        // FileObserver fires CLOSE_WRITE for a call that just ended, before any sweep has run.
+        val fresh = recording("just-recorded.m4a")
+
+        val outcome = queue.processNow(fresh)
+
+        assertEquals(ProcessOutcome.Completed, outcome)
+        assertEquals(listOf("just-recorded.m4a"), processor.seen)
+        assertTrue("the pre-existing file is still adopted", index.stateOf("old-call.m4a").done)
+    }
+
+    @Test
+    fun anUnreadableDirectoryDefersTheBaselineRatherThanTakingAnEmptyOne() = runBlocking {
+        setUpDirs()
+        clearBaseline()
+        val processor = FakeProcessor(ProcessOutcome.Completed)
+        val missingDir = File(watchDir, "does-not-exist")
+        val queue = PendingAudioQueue(
+            watchDir = missingDir,
+            index = index,
+            processor = processor,
+            nowMs = { FIXED_NOW },
+            baselineMarker = baselineMarker
+        )
+
+        queue.sweep()
+
+        // Marking the baseline taken while blind would leave the real contents unadopted, so
+        // they would all be swept as new the moment the directory became readable.
+        assertFalse("the baseline must not be claimed while the folder is unreadable", baselineMarker.exists())
+    }
 
     @Test
     fun aSuccessfulRecordingIsMarkedDoneAndNeverProcessedAgain() = runBlocking {
@@ -415,7 +512,8 @@ class PendingAudioQueueTest {
             index = index,
             processor = FakeProcessor(ProcessOutcome.Completed),
             onStuck = { name, reason -> stuckNotifications += name to reason },
-            nowMs = { FIXED_NOW }
+            nowMs = { FIXED_NOW },
+            baselineMarker = baselineMarker
         )
 
         queue.sweep()

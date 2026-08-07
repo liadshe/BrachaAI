@@ -65,7 +65,11 @@ class CallMonitorService : Service() {
             watchDir = File(WATCH_PATH),
             index = RecordingIndex.default(filesDir),
             processor = audioProcessor,
-            onStuck = { name, reason -> notifyStuck(name, reason) }
+            onStuck = { name, reason -> notifyStuck(name, reason) },
+            // App-private, alongside the index. Deliberately not in shared storage: the two
+            // belong together, so clearing app data drops both and the folder is simply
+            // re-adopted rather than half-adopted and half re-uploaded.
+            baselineMarker = File(filesDir, "recordings-baseline")
         )
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannels()

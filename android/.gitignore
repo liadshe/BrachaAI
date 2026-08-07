@@ -13,3 +13,5 @@
 .externalNativeBuild
 .cxx
 local.properties
+# Kotlin compiler scratch/crash logs — machine-local noise, not source
+.kotlin/
