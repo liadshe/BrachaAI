@@ -104,6 +104,14 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    /* Only ever seen on the way out, as .highlightedCard is removed — see below. */
+    transition: background-color 600ms ease, box-shadow 600ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .callCard {
+        transition: none;
+    }
 }
 
 .callHeader {
@@ -563,6 +571,15 @@
 
 .selectionSpacer {
     height: 72px;
+}
+
+/* Marks the call arrived at from a home-screen call card. Transitions on the way
+   out only — the class lands with the scroll, then fades once removed, so the eye
+   is drawn to the right card without leaving it permanently flagged.
+   Kept off border-color so it reads distinctly from .selectedCard above. */
+.highlightedCard {
+    background-color: #fef9c3;
+    box-shadow: 0 0 0 2px #facc15;
 }
 
 .headerTopRow {

@@ -1,5 +1,5 @@
-import { useCallback, useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useCallback, useRef, useState, useEffect } from 'react';
+import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
 import apiClient from '../../services/apiClient';
 import BottomNav from '@/components/BottomNav';
 import SelectionBar from '@/components/SelectionBar';
@@ -9,6 +9,9 @@ import { useSelectionBackButton } from '@/hooks/useSelectionBackButton';
 import { useCallDeletion } from '@/hooks/useCallDeletion';
 import { formatDuration } from '@/utils/formatDuration';
 import styles from './ContactDetailsPage.module.css';
+
+/** How long an arrived-at call stays visually marked before settling into the list. */
+export const HIGHLIGHT_MS = 2000;
 
 interface Contact {
     _id: string;
@@ -42,7 +45,15 @@ interface Task {
 
 const ContactDetailsPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
+    const [searchParams] = useSearchParams();
     const navigate = useNavigate();
+
+    // Set when arriving from a call card on the home screen: /contacts/:id?call=<callId>.
+    const focusCallId = searchParams.get('call');
+    const [highlightedCallId, setHighlightedCallId] = useState<string | null>(null);
+    const callNodes = useRef(new Map<string, HTMLDivElement>());
+    const focusHandledRef = useRef<string | null>(null);
+
     const [contact, setContact] = useState<Contact | null>(null);
     const [calls, setCalls] = useState<Call[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
@@ -107,6 +118,32 @@ const ContactDetailsPage: React.FC = () => {
         };
         fetchDetails();
     }, [id]);
+
+    /**
+     * Brings the deep-linked call into view and marks it, so arriving from the home
+     * screen lands on the call the user actually tapped rather than the top of the list.
+     *
+     * Depends on `calls` because the node cannot be scrolled to before the list that
+     * renders it is in state. `focusHandledRef` then pins this to the first render that
+     * has the call: without it, every later change to `calls` — deleting one, most
+     * obviously — would yank the page back and re-flash the highlight.
+     *
+     * A `?call=` that matches nothing (a link kept after the call was deleted) is left
+     * alone: the contact page is still the right destination, just without the marker.
+     */
+    useEffect(() => {
+        if (!focusCallId || focusHandledRef.current === focusCallId) return;
+
+        const node = callNodes.current.get(focusCallId);
+        if (!node) return;
+
+        focusHandledRef.current = focusCallId;
+        node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setHighlightedCallId(focusCallId);
+
+        const timer = setTimeout(() => setHighlightedCallId(null), HIGHLIGHT_MS);
+        return () => clearTimeout(timer);
+    }, [focusCallId, calls]);
 
     const handleDeleteSelectedCalls = async () => {
         await callDeletion.deleteCalls(callSelection.selectedIds);
@@ -385,7 +422,11 @@ const ContactDetailsPage: React.FC = () => {
                                 return (
                                     <div
                                         key={call._id}
-                                        className={`${styles.callCard} ${styles.selectableCard} ${callSelection.isSelected(call._id) ? styles.selectedCard : ''}`}
+                                        ref={(node) => {
+                                            if (node) callNodes.current.set(call._id, node);
+                                            else callNodes.current.delete(call._id);
+                                        }}
+                                        className={`${styles.callCard} ${styles.selectableCard} ${callSelection.isSelected(call._id) ? styles.selectedCard : ''} ${highlightedCallId === call._id ? styles.highlightedCard : ''}`}
                                         {...callSelection.getItemProps(call._id)}
                                     >
                                         <div className={styles.callHeader}>

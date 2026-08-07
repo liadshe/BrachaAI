@@ -82,6 +82,23 @@ const HomePage: React.FC = () => {
         setIsDeleteOpen(false);
     };
 
+    /**
+     * Opens the call where it lives — the Calls tab of its contact, scrolled to and
+     * highlighting this specific call.
+     *
+     * Passed as getItemProps' onActivate rather than as an onClick of our own, so the
+     * hook keeps deciding what a tap means: long-press still selects, and a tap while
+     * a selection is open still toggles instead of navigating away from it.
+     *
+     * Every call has a contact — Call.contactId is required and the upload path resolves
+     * one before saving — so the guard is for an unpopulated read, not a real state.
+     */
+    const openCall = (call: any) => {
+        const contactId = call.contactId?._id;
+        if (!contactId) return;
+        navigate(`/contacts/${contactId}?call=${call._id}`);
+    };
+
     return (
         <div className={styles.pageWrapper}>
             {callSelection.isSelecting && (
@@ -185,7 +202,7 @@ const HomePage: React.FC = () => {
                                     <div
                                         key={call._id}
                                         className={`${styles.insightItem} ${styles.selectableCard} ${callSelection.isSelected(call._id) ? styles.selectedCard : ''}`}
-                                        {...callSelection.getItemProps(call._id)}
+                                        {...callSelection.getItemProps(call._id, () => openCall(call))}
                                     >
                                         <div className={styles.insightHeader}>
                                             <div className={styles.callerInfo}>
