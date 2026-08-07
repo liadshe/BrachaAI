@@ -1,74 +1,5 @@
 [{
   "_id": {
-    "$oid": "6a32b86895e450d84c99919d"
-  },
-  "userId": {
-    "$oid": "6a26957844109e397cd980d3"
-  },
-  "contactId": {
-    "$oid": "6a32b86195e450d84c99919b"
-  },
-  "title": "שליחת חוזה לתומר",
-  "description": "שליחת חוזה מסודר למייל של תומר עם המחיר המובטח וקישור לתשלום מקדמה.",
-  "priority": "HIGH",
-  "status": "todo",
-  "completed": false,
-  "createdAt": {
-    "$date": "2026-06-17T15:08:24.320Z"
-  },
-  "updatedAt": {
-    "$date": "2026-06-17T15:08:24.320Z"
-  },
-  "__v": 0
-},
-{
-  "_id": {
-    "$oid": "6a32b86895e450d84c99919e"
-  },
-  "userId": {
-    "$oid": "6a26957844109e397cd980d3"
-  },
-  "contactId": {
-    "$oid": "6a32b86195e450d84c99919b"
-  },
-  "title": "התקנה של הקטרינג",
-  "description": "הצוות מגיע בשני ביולי בשעה ארבע להקים את הכל עבור האירוע המתחיל בשש בערב.",
-  "priority": "HIGH",
-  "status": "todo",
-  "completed": false,
-  "createdAt": {
-    "$date": "2026-06-17T15:08:24.321Z"
-  },
-  "updatedAt": {
-    "$date": "2026-06-17T15:08:24.321Z"
-  },
-  "__v": 0
-},
-{
-  "_id": {
-    "$oid": "6a32b91795e450d84c9991a1"
-  },
-  "userId": {
-    "$oid": "6a26957844109e397cd980d3"
-  },
-  "contactId": {
-    "$oid": "6a32b91495e450d84c99919f"
-  },
-  "title": "שליחת הודעה עם תפריט ואישור תאריך",
-  "description": "נועה צריכה לשלוח לדנה הודעה עם תפריט המתוקים המלא ואישור התאריך לאירוע.",
-  "priority": "HIGH",
-  "status": "todo",
-  "completed": false,
-  "createdAt": {
-    "$date": "2026-06-17T15:11:19.712Z"
-  },
-  "updatedAt": {
-    "$date": "2026-06-17T15:11:19.712Z"
-  },
-  "__v": 0
-},
-{
-  "_id": {
     "$oid": "6a32b91795e450d84c9991a2"
   },
   "userId": {
@@ -133,6 +64,29 @@
   },
   "updatedAt": {
     "$date": "2026-06-17T15:14:10.826Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a32b86895e450d84c99919e"
+  },
+  "userId": {
+    "$oid": "6a26957844109e397cd980d3"
+  },
+  "contactId": {
+    "$oid": "6a32b86195e450d84c99919b"
+  },
+  "title": "התקנה של הקטרינג",
+  "description": "הצוות מגיע בשני ביולי בשעה ארבע להקים את הכל עבור האירוע המתחיל בשש בערב.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T15:08:24.321Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T15:08:24.321Z"
   },
   "__v": 0
 },
@@ -207,139 +161,301 @@
 },
 {
   "_id": {
-    "$oid": "6a32c55695e450d84c9991b7"
+    "$oid": "6a32b86895e450d84c99919d"
   },
   "userId": {
     "$oid": "6a26957844109e397cd980d3"
   },
   "contactId": {
-    "$oid": "6a32c55295e450d84c9991b5"
+    "$oid": "6a32b86195e450d84c99919b"
   },
-  "title": "שליחת תאריכים לטעימות",
-  "description": "נועה תשלח לגיא שלוש אופציות לתאריכים לטעימות עד מחר.",
+  "title": "שליחת חוזה לתומר",
+  "description": "שליחת חוזה מסודר למייל של תומר עם המחיר המובטח וקישור לתשלום מקדמה.",
   "priority": "HIGH",
   "status": "todo",
   "completed": false,
   "createdAt": {
-    "$date": "2026-06-17T16:03:34.922Z"
+    "$date": "2026-06-17T15:08:24.320Z"
   },
   "updatedAt": {
-    "$date": "2026-06-17T16:03:34.922Z"
+    "$date": "2026-06-17T15:08:24.320Z"
   },
   "__v": 0
 },
 {
   "_id": {
-    "$oid": "6a32c5a495e450d84c9991bc"
+    "$oid": "6a32b91795e450d84c9991a1"
   },
   "userId": {
     "$oid": "6a26957844109e397cd980d3"
   },
   "contactId": {
-    "$oid": "6a32c5a295e450d84c9991ba"
+    "$oid": "6a32b91495e450d84c99919f"
   },
-  "title": "Send location for the event",
-  "description": "Send the exact location in Yaar Ben Shemen to the catering team.",
+  "title": "שליחת הודעה עם תפריט ואישור תאריך",
+  "description": "נועה צריכה לשלוח לדנה הודעה עם תפריט המתוקים המלא ואישור התאריך לאירוע.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-06-17T15:11:19.712Z"
+  },
+  "updatedAt": {
+    "$date": "2026-06-17T15:11:19.712Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a6d30eed77bde006686f015"
+  },
+  "userId": {
+    "$oid": "6a6c69879b79f11eea00d55a"
+  },
+  "contactId": {
+    "$oid": "6a6d30edd77bde006686f013"
+  },
+  "title": "לעשות טסט ביום שישי",
+  "description": "בן צריך לעשות טסט וליידע לאחר מכן.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-07-31T23:34:06.630Z"
+  },
+  "updatedAt": {
+    "$date": "2026-07-31T23:34:06.630Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a6d3223d77bde006686f018"
+  },
+  "userId": {
+    "$oid": "6a6c69879b79f11eea00d55a"
+  },
+  "contactId": {
+    "$oid": "6a6d30edd77bde006686f013"
+  },
+  "title": "ביצוע שיחה לאישור",
+  "description": "לנתק את השיחה הנוכחית ולבצע שיחה נוספת לאישור תוך עשר עד חמש עשרה שניות.",
+  "priority": "MEDIUM",
+  "status": "done",
+  "completed": true,
+  "createdAt": {
+    "$date": "2026-07-31T23:39:15.115Z"
+  },
+  "updatedAt": {
+    "$date": "2026-08-02T09:46:16.672Z"
+  },
+  "__v": 0,
+  "dueDate": "2026-08-02"
+},
+{
+  "_id": {
+    "$oid": "6a6d32dad77bde006686f01b"
+  },
+  "userId": {
+    "$oid": "6a6c69879b79f11eea00d55a"
+  },
+  "contactId": {
+    "$oid": "6a6d30edd77bde006686f013"
+  },
+  "title": "לשחזר אפשרות ללחוץ על כפתור X",
+  "description": "לבדוק איך אפשר לשחזר את האפשרות ללחיצה על כפתור X כפי שנדרש.",
   "priority": "MEDIUM",
   "status": "todo",
   "completed": false,
   "createdAt": {
-    "$date": "2026-06-17T16:04:52.526Z"
+    "$date": "2026-07-31T23:42:18.447Z"
   },
   "updatedAt": {
-    "$date": "2026-06-17T16:04:52.526Z"
+    "$date": "2026-08-02T10:26:44.555Z"
   },
   "__v": 0
 },
 {
   "_id": {
-    "$oid": "6a32c5a495e450d84c9991bd"
+    "$oid": "6a6dcaddd77bde006686f01e"
   },
   "userId": {
-    "$oid": "6a26957844109e397cd980d3"
+    "$oid": "6a6c69879b79f11eea00d55a"
   },
   "contactId": {
-    "$oid": "6a32c5a295e450d84c9991ba"
+    "$oid": "6a6dcadbd77bde006686f01c"
   },
-  "title": "Complete secure payment",
-  "description": "Complete the payment via the secure link sent by Noa.",
+  "title": "לתקשר בחזרה למטלפן",
+  "description": "לחזור למטלפן תוך שעתיים כפי שהתבקש.",
   "priority": "HIGH",
   "status": "todo",
   "completed": false,
   "createdAt": {
-    "$date": "2026-06-17T16:04:52.526Z"
+    "$date": "2026-08-01T10:30:53.369Z"
   },
   "updatedAt": {
-    "$date": "2026-06-17T16:04:52.526Z"
+    "$date": "2026-08-01T10:30:53.369Z"
   },
   "__v": 0
 },
 {
   "_id": {
-    "$oid": "6a32c5ab95e450d84c9991c0"
+    "$oid": "6a6e0f09d77bde006686f028"
   },
   "userId": {
-    "$oid": "6a26957844109e397cd980d3"
+    "$oid": "6a6c69879b79f11eea00d55a"
   },
   "contactId": {
-    "$oid": "6a32c5a995e450d84c9991be"
+    "$oid": "6a6c835f1f81b7ff4e6674fa"
   },
-  "title": "שליחת תפריט מעוצב",
-  "description": "נועה תשלח למשה את התפריט המעוצב יום לפני האירוע.",
+  "title": "בדוק אם הם יורדים",
+  "description": "עדכן אם האנשים שאליהם התייחסו שירדו או לא.",
+  "priority": "LOW",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-08-01T15:21:45.084Z"
+  },
+  "updatedAt": {
+    "$date": "2026-08-01T15:21:45.084Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a6e0f09d77bde006686f029"
+  },
+  "userId": {
+    "$oid": "6a6c69879b79f11eea00d55a"
+  },
+  "contactId": {
+    "$oid": "6a6c835f1f81b7ff4e6674fa"
+  },
+  "title": "התקשר לרן",
+  "description": "צור קשר עם רן כדי לבדוק את הנושא המדובר.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-08-01T15:21:45.084Z"
+  },
+  "updatedAt": {
+    "$date": "2026-08-01T15:21:45.084Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a6e315fd77bde006686f02d"
+  },
+  "userId": {
+    "$oid": "6a6c69879b79f11eea00d55a"
+  },
+  "contactId": {
+    "$oid": "6a6c9159f41a96e6fcc16ff1"
+  },
+  "title": "להזיז את הרכב",
+  "description": "להעביר את הרכב שחנה באמצע הכביש למקום חניה מתאים יותר",
   "priority": "MEDIUM",
   "status": "todo",
   "completed": false,
   "createdAt": {
-    "$date": "2026-06-17T16:04:59.580Z"
+    "$date": "2026-08-01T17:48:15.001Z"
   },
   "updatedAt": {
-    "$date": "2026-06-17T16:04:59.580Z"
+    "$date": "2026-08-01T17:48:15.001Z"
   },
   "__v": 0
 },
 {
   "_id": {
-    "$oid": "6a32c5b395e450d84c9991c3"
+    "$oid": "6a6e315fd77bde006686f02e"
   },
   "userId": {
-    "$oid": "6a26957844109e397cd980d3"
+    "$oid": "6a6c69879b79f11eea00d55a"
   },
   "contactId": {
-    "$oid": "6a32c5b095e450d84c9991c1"
+    "$oid": "6a6c9159f41a96e6fcc16ff1"
   },
-  "title": "שליחת תפריט מתוקים וקישור לתשלום מקדמה לדנה",
-  "description": "לשלוח לדנה הודעה עם תפריט המתוקים המלא, אישור התאריך וקישור לתשלום המקדמה.",
-  "priority": "HIGH",
+  "title": "שלח תמונה של הפופ-אפ",
+  "description": "שלח תמונה להדגים איך הפופ-אפ עובד כעת",
+  "priority": "LOW",
   "status": "todo",
   "completed": false,
   "createdAt": {
-    "$date": "2026-06-17T16:05:07.053Z"
+    "$date": "2026-08-01T17:48:15.001Z"
   },
   "updatedAt": {
-    "$date": "2026-06-17T16:05:07.053Z"
+    "$date": "2026-08-01T17:48:15.001Z"
   },
   "__v": 0
 },
 {
   "_id": {
-    "$oid": "6a32c5ba95e450d84c9991c6"
+    "$oid": "6a6e32a1d77bde006686f030"
   },
   "userId": {
-    "$oid": "6a26957844109e397cd980d3"
+    "$oid": "6a6c69879b79f11eea00d55a"
   },
   "contactId": {
-    "$oid": "6a32c5b795e450d84c9991c4"
+    "$oid": "6a6c8b6f1f81b7ff4e6674fc"
   },
-  "title": "שליחת חוזה וקישור לתשלום",
-  "description": "נוער צריכה לשלוח לתומר חוזה מסודר עם המחיר המובטח וקישור לתשלום מקדמה של 20%.",
+  "title": "בן מתקשר חזרה לדובר",
+  "description": "הדובר מבקש מבן להתקשר אליו כדי לבדוק משהו באפליקציה.",
   "priority": "HIGH",
   "status": "todo",
   "completed": false,
   "createdAt": {
-    "$date": "2026-06-17T16:05:14.335Z"
+    "$date": "2026-08-01T17:53:37.692Z"
   },
   "updatedAt": {
-    "$date": "2026-06-17T16:05:14.335Z"
+    "$date": "2026-08-01T17:53:37.692Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a6f1134d77bde006686f03a"
+  },
+  "userId": {
+    "$oid": "6a6c69879b79f11eea00d55a"
+  },
+  "contactId": {
+    "$oid": "6a6f1132d77bde006686f038"
+  },
+  "title": "לתאם קבלת החבילה",
+  "description": "מרקו צריך לוודא שמישהו יגיע לקבל את החבילה ולחתום עליה.",
+  "priority": "HIGH",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-08-02T09:43:16.217Z"
+  },
+  "updatedAt": {
+    "$date": "2026-08-02T09:43:16.217Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a6f11abd77bde006686f03d"
+  },
+  "userId": {
+    "$oid": "6a6c69879b79f11eea00d55a"
+  },
+  "contactId": {
+    "$oid": "6a6f1132d77bde006686f038"
+  },
+  "title": "לצלם משימה בבית",
+  "description": "הדובר ינסה לצלם את זה כשהוא יהיה בבית מחר",
+  "priority": "LOW",
+  "status": "todo",
+  "completed": false,
+  "createdAt": {
+    "$date": "2026-08-02T09:45:15.986Z"
+  },
+  "updatedAt": {
+    "$date": "2026-08-02T09:45:15.986Z"
   },
   "__v": 0
 }]

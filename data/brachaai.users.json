@@ -14,4 +14,22 @@
     "contacts": false
   },
   "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6a6c69879b79f11eea00d55a"
+  },
+  "name": "Ben Levi",
+  "email": "benlevi8010@gmail.com",
+  "phoneNumber": "0532860440",
+  "password": "$2b$12$W4XZwfOjGy.aL/xZMCx1FuFJ/vrHK5vzAlPurnJjmL2ERLQLHaujK",
+  "businessDescription": "",
+  "settings": {
+    "autoCallRecording": false
+  },
+  "permissions": {
+    "microphone": false,
+    "contacts": false
+  },
+  "__v": 0
 }]
