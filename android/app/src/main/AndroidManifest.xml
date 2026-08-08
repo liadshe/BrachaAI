@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
@@ -40,10 +40,23 @@
             </intent-filter>
         </activity>
 
+        <!--
+            specialUse, not dataSync. Android 15 (API 35) caps dataSync at 6 hours per 24, and
+            this service is meant to run permanently: past the cap the system called onTimeout(),
+            got no stopSelf(), and killed the app with ForegroundServiceDidNotStopInTimeException;
+            START_STICKY then restarted it straight into "Time limit already exhausted", crash
+            after crash on the restart backoff. specialUse carries no such cap.
+
+            If this ever ships through Play, the value below is what a reviewer reads.
+        -->
         <service
             android:name=".CallMonitorService"
-            android:foregroundServiceType="dataSync"
-            android:exported="false" />
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Watches the device's call-recording folder so a finished call can be transcribed and uploaded as soon as it is written. The app never captures audio itself; it only reacts to files the system recorder produces, which requires being resident to observe them." />
+        </service>
 
         <service
             android:name=".CallOverlayService"
