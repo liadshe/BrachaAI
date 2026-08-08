@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.FileObserver
 import android.os.IBinder
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +34,14 @@ class CallMonitorService : Service() {
     private var networkWatcher: NetworkWatcher? = null
     private lateinit var notificationManager: NotificationManager
     private val errorNotificationId = java.util.concurrent.atomic.AtomicInteger(100)
+
+    /**
+     * Set when the system refused the foreground start or timed us out. Read from
+     * `onStartCommand`, which runs on the main thread, and written from [enterForeground] and
+     * [onTimeout], which also do — `@Volatile` is belt-and-braces for the restart path.
+     */
+    @Volatile
+    private var foregroundStartRefused = false
 
     override fun onCreate() {
         super.onCreate()
@@ -74,17 +83,9 @@ class CallMonitorService : Service() {
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannels()
 
-        val notification = buildMonitoringNotification()
-
-        // SPECIAL_USE rather than DATA_SYNC, and it must match the manifest's
-        // foregroundServiceType or startForeground throws. dataSync is capped at 6 hours per 24
-        // on Android 15+; this service is meant to be permanent, so it hit that cap daily and
-        // crash-looped. See the comment on the <service> element in AndroidManifest.xml.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
+        // Nothing below this line runs if the system refuses us the foreground: there is no
+        // point watching a directory in a process Android is about to cache or kill.
+        if (!enterForeground()) return
 
         startWatching()
         isRunning = true
@@ -95,12 +96,85 @@ class CallMonitorService : Service() {
         startBriefingSyncLoop()
     }
 
+    /**
+     * Enters the foreground, or reports that the system would not let us.
+     *
+     * `startForeground` is not a call that can be assumed to succeed. Two refusals have both
+     * killed this app in production, and neither is a bug in our own logic:
+     *
+     * - `ForegroundServiceStartNotAllowedException: Time limit already exhausted` — the daily
+     *   budget for the service type is spent. This is what the `dataSync` 6-hour cap did every
+     *   day: `START_STICKY` restarted the service into a start it could not legally make, so
+     *   the restart crashed ~400ms in and kept crashing on the backoff.
+     * - `ForegroundServiceStartNotAllowedException: ... mAllowStartForeground false` — the app
+     *   was in the background and had no exemption to start a foreground service at all.
+     *
+     * Both are the system telling us "not now", which is survivable information, not a fatal
+     * error. Uncaught, it propagates out of `onCreate` as `RuntimeException: Unable to create
+     * service` and the user sees "BrachaAI keeps stopping". Caught, the service stops quietly
+     * and the app lives; [MainActivity] starts it again on the next resume, and bringing the
+     * app to the foreground is also what resets the system's timer.
+     *
+     * The type must match `android:foregroundServiceType` in the manifest or the call throws
+     * regardless of budget.
+     */
+    private fun enterForeground(): Boolean {
+        val notification = buildMonitoringNotification()
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            true
+        } catch (e: Exception) {
+            // Deliberately broad. The documented refusals are IllegalStateException subclasses,
+            // but an OEM refusing the notification or a revoked POST_NOTIFICATIONS would arrive
+            // as something else, and every one of them means the same thing here: we are not
+            // going to be a foreground service right now, and that must not be fatal.
+            foregroundStartRefused = true
+            Log.e(TAG, "The system refused the foreground start; stopping quietly instead of crashing", e)
+            stopSelf()
+            false
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // A refused foreground start already called stopSelf, but the start command that
+        // created us is still delivered. START_NOT_STICKY here stops Android relaunching us
+        // straight back into the same refusal — the condition is a daily budget or a
+        // background-start restriction, and neither clears in the seconds a restart takes.
+        // MainActivity.startMonitorService brings us back once the user is looking at the app,
+        // which is also when the system's timer resets.
+        if (foregroundStartRefused) return START_NOT_STICKY
+
         when (intent?.action) {
             ACTION_FLUSH -> flushPending()
             ACTION_SYNC_BRIEFINGS -> syncBriefings()
         }
         return START_STICKY
+    }
+
+    /**
+     * The system's "your time is up" tap, for any foreground service type that has a time
+     * budget. We have a few seconds to call [stopSelf]; miss that window and the process is
+     * killed with `ForegroundServiceDidNotStopInTimeException`, which is the crash that took
+     * this app down daily under `dataSync`.
+     *
+     * `specialUse` carries no budget today, so this should never fire. It is here because the
+     * absence of this method is exactly what turned a routine system limit into a crash loop,
+     * and because which types are capped is Google's decision to change, not ours — if
+     * `specialUse` is capped in a future release, this degrades to a clean stop on its own.
+     *
+     * Deliberately does no cleanup beyond stopping: `onDestroy` already tears down the
+     * observer, the network watcher and the coroutine scope, and anything slow here would miss
+     * the few-second window and cause the very crash it exists to prevent.
+     */
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "The system timed out this foreground service (type $fgsType); stopping now")
+        foregroundStartRefused = true
+        stopSelf()
     }
 
     /**
@@ -376,17 +450,41 @@ class CallMonitorService : Service() {
         private const val TAG = "CallMonitorService"
 
         /** Asks the running service to retry queued uploads — called right after login. */
-        fun requestFlush(context: Context) {
-            val intent = Intent(context, CallMonitorService::class.java).apply { action = ACTION_FLUSH }
-            context.startForegroundService(intent)
-        }
+        fun requestFlush(context: Context) = deliver(context, ACTION_FLUSH)
 
         /** Asks the running service to refresh the overlay's briefing snapshot. */
-        fun requestBriefingSync(context: Context) {
+        fun requestBriefingSync(context: Context) = deliver(context, ACTION_SYNC_BRIEFINGS)
+
+        /**
+         * Hands one command to the service, without asking for a foreground service.
+         *
+         * Both callers are messages to a service that is already up — "retry the queue", "the
+         * user edited a task" — not requests to create one. `MainActivity.startMonitorService`
+         * is the call that creates it, and `BootReceiver` is the call that revives it after a
+         * reboot; those two legitimately use `startForegroundService`.
+         *
+         * These two did as well, and it was wrong on both counts. `startForegroundService`
+         * carries a contract — the service must reach `startForeground` within about five
+         * seconds or the app is killed — and re-arms the whole foreground lifecycle for what is
+         * just an intent delivery. `requestBriefingSync` runs from `MainActivity.onResume`, so
+         * it fired on every unlock and every app switch; under the old `dataSync` type that was
+         * the call the crash trace named, and it is why the dialog appeared the moment the app
+         * was opened. `startService` delivers the same `onStartCommand` with no such contract,
+         * and is legal here because both callers run with the activity in the foreground.
+         *
+         * Wrapped anyway: a caller can be backgrounded between deciding to send and sending, and
+         * a background `startService` throws. A missed briefing refresh is a stale card until
+         * the next sync; taking the app down over one would be far worse.
+         */
+        private fun deliver(context: Context, action: String) {
             val intent = Intent(context, CallMonitorService::class.java).apply {
-                action = ACTION_SYNC_BRIEFINGS
+                this.action = action
             }
-            context.startForegroundService(intent)
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not deliver $action to the monitor service", e)
+            }
         }
     }
 }
