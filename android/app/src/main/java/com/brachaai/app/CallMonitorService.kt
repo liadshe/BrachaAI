@@ -76,8 +76,12 @@ class CallMonitorService : Service() {
 
         val notification = buildMonitoringNotification()
 
+        // SPECIAL_USE rather than DATA_SYNC, and it must match the manifest's
+        // foregroundServiceType or startForeground throws. dataSync is capped at 6 hours per 24
+        // on Android 15+; this service is meant to be permanent, so it hit that cap daily and
+        // crash-looped. See the comment on the <service> element in AndroidManifest.xml.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
