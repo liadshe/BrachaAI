@@ -58,6 +58,14 @@ export const analyzeTranscript = async (transcript: string, businessDescription:
   TASKS RULES:
   - Only extract clear action items with a responsible party or deadline.
   - If the call is purely personal with nothing to do, return an empty tasks array.
+  - Each action item appears EXACTLY ONCE in the array, no matter how many times it
+    was raised during the call. Callers often circle back to the same commitment —
+    revisiting it, confirming it, or restating it at the end. That is still one task.
+  - Before returning, re-read your tasks array and merge any two entries that describe
+    the same underlying action, even if worded differently
+    ("send the contract" / "email over the signed contract" → one task).
+  - When merging repeated mentions, use the most urgent priority and the most complete
+    detail stated across all of them.
 
   IMPORTANT: Detect the language of the transcript and write the summary and all task text in that same language. Do not translate.`
             },
