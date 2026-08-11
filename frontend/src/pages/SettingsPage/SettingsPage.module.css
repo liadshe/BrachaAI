@@ -166,6 +166,23 @@
     border-top: 1px solid #f1f5f9;
 }
 
+/* The recording row links out to the phone's own settings rather than toggling anything, so
+   it is a real <button> — focusable, and announced as a control. These resets keep it
+   visually identical to the plain .settingItem rows beside it. */
+.settingButton {
+    width: 100%;
+    background: none;
+    border: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.settingButton:hover {
+    background-color: #f8fafc;
+}
+
 .settingText {
     display: flex;
     flex-direction: column;

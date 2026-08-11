@@ -17,6 +17,26 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- Package visibility, API 30+: an invisible package never resolves, so every app we
+         try to send the user to for call-recording settings has to be named here. Two entries,
+         because the screen is not always in the same place:
+           DIAL              — the dialer itself, for its own settings activity and as the
+                               fallback landing.
+           OPEN_CALL_SETTINGS — Samsung's telephony UI, which is where One UI actually keeps
+                               "Record calls". The Samsung dialer package contains no settings
+                               activity at all, so DIAL alone cannot reach it.
+         Both are narrower than QUERY_ALL_PACKAGES, which would need a Play policy declaration.
+         Adding an action to CallRecordingSettingsResolver.SETTINGS_ACTIONS means adding it
+         here too, or it silently never resolves. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+        </intent>
+        <intent>
+            <action android:name="com.samsung.android.app.telephonyui.action.OPEN_CALL_SETTINGS" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"

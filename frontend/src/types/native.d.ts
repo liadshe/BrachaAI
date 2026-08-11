@@ -19,6 +19,12 @@ declare global {
      */
     getDeleteAudioAfterProcessing?(): boolean;
     setDeleteAudioAfterProcessing?(enabled: boolean): void;
+    /**
+     * Opens the phone's own call-recording setting. The app never records calls itself, so
+     * this is the only switch that does anything. Optional for the same reason as the
+     * settings methods: the committed bundle can run inside an older APK.
+     */
+    openCallRecordingSettings?(): void;
   }
 
   interface Window {
