@@ -45,45 +45,60 @@ testable on the plain JVM, no device required.
 | Target | Becomes |
 | --- | --- |
 | `DialerSettings(pkg, cls)` | An explicit `Intent` on that `ComponentName` |
-| `AppInfo(pkg)` | `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`, `data = package:<pkg>` |
+| `DialerApp(pkg)` | `packageManager.getLaunchIntentForPackage(pkg)` |
 | `SystemSettings` | `Settings.ACTION_SETTINGS` |
 
-**`CallRecordingSettingsResolver.targetsFor(defaultDialerPackage: String?)`** — pure,
-unit-testable, returns the ordered list to try. It emits settings-activity class names
-only for the package that is actually the default dialer, so a Samsung phone is never
-asked to open a Google class:
+**`CallRecordingSettingsResolver.targetsFor(defaultDialerPackage, discoveredSettingsActivities)`**
+— pure, unit-testable, returns the ordered list to try:
 
-- `com.google.android.dialer` →
-  `com.android.dialer.main.impl.settings.DialerSettingsActivity`, then
-  `com.android.dialer.settings.DialerSettingsActivity` (the older path).
-- `com.android.dialer` (AOSP) → `com.android.dialer.settings.DialerSettingsActivity`.
-- `com.samsung.android.dialer` →
-  `com.samsung.android.dialer.settings.DialerSettingsActivity`.
+1. **Discovered** settings activities, in the order the package manager reported them.
+   These are exported activities the launcher found inside the dialer package itself, so
+   they describe *this* device rather than someone else's.
+2. **Known** class names for that package, as a backstop for when discovery is blocked or
+   empty. Emitted only for the package that is actually the default dialer, so a Samsung
+   phone is never asked to open a Google class:
+   - `com.google.android.dialer` → `com.android.dialer.main.impl.settings.DialerSettingsActivity`,
+     `com.android.dialer.app.settings.DialerSettingsActivity`,
+     `com.android.dialer.settings.DialerSettingsActivity`.
+   - `com.android.dialer` (AOSP) → the last two of those.
+   - `com.samsung.android.dialer` → `com.samsung.android.dialer.settings.DialerSettingsActivity`.
+3. `DialerApp(pkg)`.
+4. `SystemSettings`.
 
-Every non-null package, known or not, is then followed by `AppInfo(pkg)` and
-`SystemSettings`. A null package yields `listOf(SystemSettings)` alone.
+Class names appearing in both 1 and 2 are de-duplicated, and blank ones dropped. A null or
+blank package yields `listOf(SystemSettings)` alone.
+
+**Why discovery, and why no app-info.** The first version guessed class names and fell back
+to `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`. On a real Pixel both guesses missed, and
+app-info — being always resolvable — won every time. There is no route from Settings > Apps >
+Phone to call recording, so the fallback that always succeeded was also the one that helped
+least. App-info is gone. The dialer's own launcher screen replaces it: one overflow menu from
+the setting, and the toast names the remaining hops.
 
 **`CallRecordingSettingsLauncher`** — the Android half. Reads
-`TelecomManager.getDefaultDialerPackage()`, walks the target list, and starts the first
-target that works. Intents carry `FLAG_ACTIVITY_NEW_TASK`, because the bridge holds an
-application context.
+`TelecomManager.getDefaultDialerPackage()`, enumerates that package's activities via
+`getPackageInfo(pkg, GET_ACTIVITIES)`, keeps the **exported** ones whose class name contains
+"settings", and hands those to the resolver. Non-exported activities are filtered out because
+another app cannot start them at all — offering one guarantees a `SecurityException` later.
+Enumeration failure degrades to an empty list and the known-names backstop. It then walks the
+target list and starts the first that works, with `FLAG_ACTIVITY_NEW_TASK` since the bridge
+holds an application context.
 
-The `packageManager.resolveActivity` check runs **only for `DialerSettings` targets** —
-those are the undocumented activities that may genuinely not exist, and an unchecked start
-would throw `ActivityNotFoundException`. `AppInfo` and `SystemSettings` go straight to
-`startActivity`. Gating them too would put the chain's one guarantee — that the last target
-always exists — behind a runtime check that could veto it, and a vetoed last target means
-the loop exhausts and the row does nothing at all, for exactly the users whose dialer deep
-link already missed. The loop's `try/catch` covers a refused start either way, so attempting
-costs nothing.
+The `packageManager.resolveActivity` check runs **only for `DialerSettings` targets** — those
+are the undocumented activities that may genuinely not exist. `DialerApp` comes from
+`getLaunchIntentForPackage`, already resolved by construction, and `SystemSettings` is a
+documented system action. Gating those would put the chain's one guarantee — that the last
+target always exists — behind a runtime check that could veto it, and a vetoed last target
+means the loop exhausts and the row does nothing at all, for exactly the users whose dialer
+deep link already missed. The loop's `try/catch` covers a refused start either way.
 
-Alongside the launch it posts a toast naming the manual path — "In your Phone app: Call
-settings → Record calls" — shown after every successful start, including a direct hit on
-the dialer's own settings activity, since even there the user still has to walk that path
-themselves. Those two labels are the Phone app's own wording, confirmed on a device; an OEM
-whose menu reads differently needs this string changed, not the navigation logic. The toast
-is posted to `Looper.getMainLooper()`: JavaScript bridge calls arrive on the WebView's
-JavaBridge thread, where a bare `Toast.show` throws.
+Alongside the launch it posts a toast naming the manual path — "Phone app: tap ⋮ (top right)
+→ Settings → Record calls" — shown after every successful start, since even a direct hit on
+the dialer's settings screen leaves the user to find "Record calls". The wording starts from
+the dialer's home screen because that is the most common landing. These are the Phone app's
+own labels, reported from a device; an OEM whose menu reads differently needs this string
+changed, not the navigation logic. The toast is posted to `Looper.getMainLooper()`: JavaScript
+bridge calls arrive on the WebView's JavaBridge thread, where a bare `Toast.show` throws.
 
 ### Manifest
 

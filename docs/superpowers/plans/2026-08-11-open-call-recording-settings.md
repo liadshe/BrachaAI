@@ -662,7 +662,7 @@ None of the native half is verified by any automated check, so this is the real 
 
 1. Build and install: `cd android && ./gradlew installDebug`.
 2. Open Settings in BrachaAI. The "Automatic Call Recording" row shows a chevron, not a switch, and reads "Enable it in your Phone app settings".
-3. Tap it. The Phone app's settings screen opens, and a toast reads "In your Phone app: Call settings → Record calls".
-4. If it lands on Settings > Apps > Phone instead, the deep link missed on that build — capture the value of `TelecomManager.getDefaultDialerPackage()` from logcat (`adb logcat -s CallRecordingSettings`) and add that device's settings activity to `SETTINGS_ACTIVITIES`.
-5. Walk **Call settings → Record calls** and turn it on, then return, place a call, and confirm a file appears in `/storage/emulated/0/Recordings/Call` and gets transcribed.
+3. Tap it. The Phone app opens — ideally straight onto its settings screen — and a toast reads "Phone app: tap ⋮ (top right) → Settings → Record calls".
+4. Read `adb logcat -s CallRecordingSettings`. `Discovered settings activities in <pkg>: [...]` shows what enumeration found, `Skipping unresolvable target:` shows each miss, and `Opened <target>` names the winner. Landing on `DialerApp` means every settings activity was unexported or absent — expected on some builds, and the reason app-info was removed as a fallback. Landing on `SystemSettings` means the dialer had no launch intent, which would be surprising and worth investigating.
+5. Walk **⋮ → Settings → Record calls** and turn it on, then return, place a call, and confirm a file appears in `/storage/emulated/0/Recordings/Call` and gets transcribed.
 6. Repeat on a Samsung device if one is available — the Samsung class name in the map is unverified.
