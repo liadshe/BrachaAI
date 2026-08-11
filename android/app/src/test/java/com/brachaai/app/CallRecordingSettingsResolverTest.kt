@@ -19,23 +19,57 @@ class CallRecordingSettingsResolverTest {
     private val samsung = "com.samsung.android.dialer"
     private val oem = "com.oem.unknown.dialer"
 
-    @Test
-    fun `what the device actually reports is tried before any hardcoded guess`() {
-        val targets = CallRecordingSettingsResolver.targetsFor(
-            google,
-            listOf("com.google.android.dialer.SettingsActivity")
+    private val samsungAction =
+        CallRecordingTarget.SettingsAction(
+            "com.samsung.android.app.telephonyui.action.OPEN_CALL_SETTINGS"
         )
 
+    /**
+     * An action carries an intent filter, so it is exported by construction and survives class
+     * renames. Nothing brittler should be tried ahead of it.
+     */
+    @Test
+    fun `an intent action is tried before any class name`() {
         assertEquals(
-            CallRecordingTarget.DialerSettings(google, "com.google.android.dialer.SettingsActivity"),
-            targets.first()
+            samsungAction,
+            CallRecordingSettingsResolver.targetsFor(
+                google,
+                listOf("com.google.android.dialer.SettingsActivity")
+            ).first()
         )
+    }
+
+    /**
+     * The Galaxy S25 case that broke the class-name approach: the Samsung dialer package holds
+     * no settings activity at all, and the screen lives in the OEM telephony UI instead. Keying
+     * actions to the dialer package would strand a Samsung phone running Google's dialer.
+     */
+    @Test
+    fun `the action is offered whatever the default dialer is`() {
+        listOf(google, samsung, oem, null).forEach { pkg ->
+            val targets = CallRecordingSettingsResolver.targetsFor(pkg)
+            assertTrue(
+                "Action missing for dialer $pkg, got $targets",
+                targets.contains(samsungAction)
+            )
+        }
+    }
+
+    @Test
+    fun `what the device actually reports is tried before any hardcoded class name`() {
+        val discovered = "com.google.android.dialer.SettingsActivity"
+
+        val targets = CallRecordingSettingsResolver.targetsFor(google, listOf(discovered))
+        val classTargets = targets.filterIsInstance<CallRecordingTarget.DialerSettings>()
+
+        assertEquals(CallRecordingTarget.DialerSettings(google, discovered), classTargets.first())
     }
 
     @Test
     fun `discovery rescues a dialer no hardcoded name covers`() {
         assertEquals(
             listOf(
+                samsungAction,
                 CallRecordingTarget.DialerSettings(oem, "com.oem.dialer.ui.CallSettingsActivity"),
                 CallRecordingTarget.DialerApp(oem),
                 CallRecordingTarget.SystemSettings,
@@ -45,6 +79,21 @@ class CallRecordingSettingsResolverTest {
                 listOf("com.oem.dialer.ui.CallSettingsActivity")
             )
         )
+    }
+
+    /**
+     * Only the OEM guesses may be skipped on a resolve miss. If the last resort were gated too,
+     * a false negative would exhaust the walk and the row would do nothing at all.
+     */
+    @Test
+    fun `only the targets that might not exist are resolve-gated`() {
+        val targets = CallRecordingSettingsResolver.targetsFor(samsung, listOf("com.x.SettingsY"))
+
+        targets.forEach { target ->
+            val expected = target is CallRecordingTarget.SettingsAction ||
+                target is CallRecordingTarget.DialerSettings
+            assertEquals("Wrong gating for $target", expected, target.needsResolveCheck)
+        }
     }
 
     @Test
@@ -63,6 +112,7 @@ class CallRecordingSettingsResolverTest {
     fun `google dialer falls back to all three known class names when discovery finds nothing`() {
         assertEquals(
             listOf(
+                samsungAction,
                 CallRecordingTarget.DialerSettings(
                     google,
                     "com.android.dialer.main.impl.settings.DialerSettingsActivity"
@@ -86,6 +136,7 @@ class CallRecordingSettingsResolverTest {
     fun `a samsung phone is never handed a google class name`() {
         assertEquals(
             listOf(
+                samsungAction,
                 CallRecordingTarget.DialerSettings(
                     samsung,
                     "com.samsung.android.dialer.settings.DialerSettingsActivity"
@@ -101,6 +152,7 @@ class CallRecordingSettingsResolverTest {
     fun `an unrecognised dialer with nothing discovered still opens the dialer itself`() {
         assertEquals(
             listOf(
+                samsungAction,
                 CallRecordingTarget.DialerApp(oem),
                 CallRecordingTarget.SystemSettings,
             ),
@@ -126,9 +178,9 @@ class CallRecordingSettingsResolverTest {
     }
 
     @Test
-    fun `no default dialer leaves only the system settings screen`() {
+    fun `no default dialer still tries the action before giving up on system settings`() {
         assertEquals(
-            listOf(CallRecordingTarget.SystemSettings),
+            listOf(samsungAction, CallRecordingTarget.SystemSettings),
             CallRecordingSettingsResolver.targetsFor(null)
         )
     }
@@ -136,8 +188,16 @@ class CallRecordingSettingsResolverTest {
     @Test
     fun `a blank package name is treated as no dialer, not as a package named empty`() {
         assertEquals(
-            listOf(CallRecordingTarget.SystemSettings),
+            listOf(samsungAction, CallRecordingTarget.SystemSettings),
             CallRecordingSettingsResolver.targetsFor("   ")
+        )
+    }
+
+    @Test
+    fun `no dialer means no dialer target, since there is nothing to launch`() {
+        assertTrue(
+            CallRecordingSettingsResolver.targetsFor(null)
+                .none { it is CallRecordingTarget.DialerApp || it is CallRecordingTarget.DialerSettings }
         )
     }
 

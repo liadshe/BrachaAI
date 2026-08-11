@@ -44,6 +44,7 @@ testable on the plain JVM, no device required.
 
 | Target | Becomes |
 | --- | --- |
+| `SettingsAction(action)` | An implicit `Intent(action)` |
 | `DialerSettings(pkg, cls)` | An explicit `Intent` on that `ComponentName` |
 | `DialerApp(pkg)` | `packageManager.getLaunchIntentForPackage(pkg)` |
 | `SystemSettings` | `Settings.ACTION_SETTINGS` |
@@ -51,6 +52,13 @@ testable on the plain JVM, no device required.
 **`CallRecordingSettingsResolver.targetsFor(defaultDialerPackage, discoveredSettingsActivities)`**
 — pure, unit-testable, returns the ordered list to try:
 
+0. **Known intent actions**, device-wide. Currently one:
+   `com.samsung.android.app.telephonyui.action.OPEN_CALL_SETTINGS`, verified on a Galaxy S25
+   to land on the screen holding "Record calls". Actions rank first because an action carries
+   an intent filter — it is exported by construction and survives class renames, which is
+   everything a component name is not. Deliberately *not* keyed to the dialer package: on One
+   UI the screen belongs to the telephony UI, and a Samsung phone running Google's dialer as
+   default should still reach it.
 1. **Discovered** settings activities, in the order the package manager reported them.
    These are exported activities the launcher found inside the dialer package itself, so
    they describe *this* device rather than someone else's.
@@ -68,12 +76,19 @@ testable on the plain JVM, no device required.
 Class names appearing in both 1 and 2 are de-duplicated, and blank ones dropped. A null or
 blank package yields `listOf(SystemSettings)` alone.
 
-**Why discovery, and why no app-info.** The first version guessed class names and fell back
-to `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`. On a real Pixel both guesses missed, and
-app-info — being always resolvable — won every time. There is no route from Settings > Apps >
-Phone to call recording, so the fallback that always succeeded was also the one that helped
-least. App-info is gone. The dialer's own launcher screen replaces it: one overflow menu from
-the setting, and the toast names the remaining hops.
+**What the device actually showed, and what it cost.** The first version guessed class names
+and fell back to `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`. On a Galaxy S25 the guess
+missed and app-info — always resolvable — won every time, stranding the user on a page with
+no route to call recording. `dumpsys package com.samsung.android.dialer` then showed why the
+guess could never have worked: **the Samsung dialer contains no settings activity at all.**
+Its only `.setting.` component is a broadcast receiver. The screen is in
+`com.samsung.android.app.telephonyui`, a different package entirely, reachable by the action
+above. The original design's premise — that a dialer's settings live inside the dialer — is
+simply false on One UI.
+
+Hence the two structural changes: an action tier above the class names, and app-info deleted
+in favour of the dialer's own launcher screen, which is one overflow menu from the setting
+rather than a dead end.
 
 **`CallRecordingSettingsLauncher`** — the Android half. Reads
 `TelecomManager.getDefaultDialerPackage()`, enumerates that package's activities via

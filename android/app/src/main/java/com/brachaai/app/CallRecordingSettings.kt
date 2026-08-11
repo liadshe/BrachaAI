@@ -14,12 +14,27 @@ import android.widget.Toast
  * Where to send a user who wants automatic call recording turned on.
  *
  * BrachaAI does not record calls: the phone's dialer does, into the directory
- * [CallMonitorService.WATCH_PATH] watches. Android publishes no intent for that setting —
- * it is a private screen inside whichever dialer the phone ships with — so the only way in
- * is an explicit, undocumented component name that may be renamed or simply absent.
- * Everything after the first target is therefore a fallback, and the last one always exists.
+ * [CallMonitorService.WATCH_PATH] watches. The *platform* publishes no intent for that
+ * setting, and where the screen lives is not even consistent between vendors — One UI keeps
+ * it in the telephony UI, not in the dialer package at all. Some OEMs do expose an action for
+ * it, which is the one durable kind of target; everything else is an undocumented component
+ * name that may be renamed, unexported, or simply absent.
+ *
+ * So the list is ordered by how much it can be trusted, and every entry after the first is a
+ * fallback. The last one always exists.
  */
 sealed class CallRecordingTarget {
+    /**
+     * An implicit intent action that opens a call-settings screen. The best kind of target:
+     * an action carries an intent filter, so it is exported by construction, and it survives
+     * the class renames that make [DialerSettings] brittle. Verified on a Galaxy S25 —
+     * `OPEN_CALL_SETTINGS` lands directly on the screen holding "Record calls".
+     *
+     * Kept device-wide rather than keyed to the dialer package: the screen belongs to the
+     * OEM's telephony UI, which is installed regardless of which dialer is currently default.
+     */
+    data class SettingsAction(val action: String) : CallRecordingTarget()
+
     /** An undocumented settings activity inside the dialer. May not exist on this device. */
     data class DialerSettings(
         val packageName: String,
@@ -28,7 +43,7 @@ sealed class CallRecordingTarget {
 
     /**
      * The dialer's own launcher screen. Lands the user in the Phone app, one overflow menu
-     * from "Call settings → Record calls" — which is why it outranks anything in the system
+     * from "⋮ → Settings → Record calls" — which is why it outranks anything in the system
      * Settings app. Settings > Apps > Phone used to sit here and was removed: it is always
      * resolvable and therefore always wins, but there is no route from it to call recording
      * at all, so it consumed the fallback and stranded the user somewhere useless.
@@ -37,6 +52,17 @@ sealed class CallRecordingTarget {
 
     /** The top-level system Settings screen. The last resort; always resolvable. */
     data object SystemSettings : CallRecordingTarget()
+
+    /**
+     * Whether the launcher must ask the package manager before starting this target.
+     *
+     * True for the OEM-specific guesses, which genuinely may not exist here — an unchecked
+     * start would throw. False for the two that are resolvable by construction, because a
+     * false negative on the last resort would exhaust the walk and leave the user with a row
+     * that does nothing.
+     */
+    val needsResolveCheck: Boolean
+        get() = this is SettingsAction || this is DialerSettings
 }
 
 /**
@@ -50,11 +76,12 @@ object CallRecordingSettingsResolver {
      * The ordered list of places to try, best first.
      *
      * [discoveredSettingsActivities] are exported activity class names the caller found by
-     * asking the package manager what the dialer actually contains. They come first because
-     * they are what is on *this* device, whereas [SETTINGS_ACTIVITIES] is a guess compiled
-     * from other people's phones. Guessing is what failed: on a Pixel the two known Google
-     * class names both missed, the walk fell through, and the user landed nowhere useful.
-     * The known names are kept only as a backstop for when discovery returns nothing.
+     * asking the package manager what the dialer actually contains. They outrank
+     * [SETTINGS_ACTIVITIES] because they describe *this* device, whereas the map is a guess
+     * compiled from other people's phones — and guessing is exactly what failed: on a Galaxy
+     * S25 the Samsung class name missed, the walk fell through, and the user landed on an
+     * app-info page with no route to call recording. The map is now only a backstop for when
+     * discovery is blocked or returns nothing.
      *
      * Known class names are emitted only for the package that is actually the default dialer.
      * A Samsung phone must never be handed a Google class name: it could not resolve on any
@@ -64,17 +91,37 @@ object CallRecordingSettingsResolver {
         defaultDialerPackage: String?,
         discoveredSettingsActivities: List<String> = emptyList()
     ): List<CallRecordingTarget> {
+        val actions = SETTINGS_ACTIONS.map { CallRecordingTarget.SettingsAction(it) }
+
         val pkg = defaultDialerPackage?.takeIf { it.isNotBlank() }
-            ?: return listOf(CallRecordingTarget.SystemSettings)
+            ?: return actions + CallRecordingTarget.SystemSettings
 
         val classNames = (discoveredSettingsActivities + SETTINGS_ACTIVITIES[pkg].orEmpty())
             .filter { it.isNotBlank() }
             .distinct()
 
-        return classNames.map { CallRecordingTarget.DialerSettings(pkg, it) } +
+        return actions +
+            classNames.map { CallRecordingTarget.DialerSettings(pkg, it) } +
             CallRecordingTarget.DialerApp(pkg) +
             CallRecordingTarget.SystemSettings
     }
+
+    /**
+     * Intent actions that open a call-settings screen, tried before any class name.
+     *
+     * Not keyed on the dialer package on purpose. The screen lives in the OEM's telephony UI,
+     * not in the dialer — on a Galaxy S25 the dialer package contains no settings activity at
+     * all, which is what made the class-name approach fail there. A Samsung phone running
+     * Google's dialer as default should still reach the Samsung screen.
+     *
+     * An action that nothing handles is skipped by the launcher's resolve check, so listing
+     * one costs a lookup on devices that lack it. Each entry needs a matching `<queries>`
+     * element in the manifest, or package visibility hides its handler and it never resolves.
+     */
+    private val SETTINGS_ACTIONS = listOf(
+        // Samsung (One UI). Filtered onto .callsettings.ui.preference.CallSettingsActivity.
+        "com.samsung.android.app.telephonyui.action.OPEN_CALL_SETTINGS",
+    )
 
     /**
      * Known settings activities per dialer package, most likely first — the backstop for a
@@ -102,15 +149,11 @@ object CallRecordingSettingsResolver {
 /**
  * Opens the phone's call-recording setting, best effort.
  *
- * Only [CallRecordingTarget.DialerSettings] is checked with `resolveActivity` before it is
- * started — those component names are undocumented and may not exist on a given device, so a
- * miss has to be a silent skip rather than a crash. [CallRecordingTarget.DialerApp] comes from
- * `getLaunchIntentForPackage`, which has already resolved by construction, and
- * [CallRecordingTarget.SystemSettings] is a documented, always-resolvable system action; gating
- * either the same way would mean that if `resolveActivity` ever returned a false negative, the
- * loop would exhaust with nothing started, for exactly the users whose dialer deep link already
- * missed. They go straight to `startActivity`, and the existing `try/catch` below already covers
- * `ActivityNotFoundException`, so attempting costs nothing.
+ * Which targets get a `resolveActivity` check is [CallRecordingTarget.needsResolveCheck]: the
+ * OEM guesses do, since a miss must be a silent skip rather than a crash; the two that resolve
+ * by construction do not, because a false negative on the last resort would exhaust the walk
+ * and leave the user with a row that does nothing. The `try/catch` below covers a refused start
+ * either way, so attempting an ungated target costs nothing.
  */
 class CallRecordingSettingsLauncher(context: Context) {
 
@@ -122,7 +165,7 @@ class CallRecordingSettingsLauncher(context: Context) {
 
         for (target in targets) {
             val intent = intentFor(target)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: continue
-            if (target is CallRecordingTarget.DialerSettings &&
+            if (target.needsResolveCheck &&
                 appContext.packageManager.resolveActivity(intent, 0) == null
             ) {
                 Log.d(TAG, "Skipping unresolvable target: $target")
@@ -183,6 +226,8 @@ class CallRecordingSettingsLauncher(context: Context) {
 
     /** Null when the target cannot be expressed as an intent on this device; the caller skips it. */
     private fun intentFor(target: CallRecordingTarget): Intent? = when (target) {
+        is CallRecordingTarget.SettingsAction -> Intent(target.action)
+
         is CallRecordingTarget.DialerSettings ->
             Intent().setClassName(target.packageName, target.className)
 
