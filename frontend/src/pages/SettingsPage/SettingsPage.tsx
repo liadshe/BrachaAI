@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import apiClient from '../../services/apiClient';
 import { endSession } from '@/services/session';
 import { getStoredUser } from '@/services/authTokens';
 import BottomNav from '@/components/BottomNav';
@@ -9,14 +8,13 @@ import styles from './SettingsPage.module.css';
 const SettingsPage: React.FC = () => {
     const navigate = useNavigate();
     const [user, setUser] = useState<any>(getStoredUser());
-    const [autoCallRecording, setAutoCallRecording] = useState(user.settings?.autoCallRecording || false);
+    const [callRecordingSupported, setCallRecordingSupported] = useState(false);
     const [deleteAudioAfterProcessing, setDeleteAudioAfterProcessing] = useState(true);
     const [audioSettingSupported, setAudioSettingSupported] = useState(false);
 
     useEffect(() => {
         const storedUser = getStoredUser();
         setUser(storedUser);
-        setAutoCallRecording(storedUser.settings?.autoCallRecording || false);
 
         // Native-only setting: the Android host owns it so the background call-processing
         // service can read it offline and before login. Absent in a plain browser, where
@@ -26,26 +24,14 @@ const SettingsPage: React.FC = () => {
             setAudioSettingSupported(true);
             setDeleteAudioAfterProcessing(bridge.getDeleteAudioAfterProcessing());
         }
-    }, []);
 
-    const handleToggle = async (setting: string, value: boolean) => {
-        if (setting === 'autoCallRecording') setAutoCallRecording(value);
-
-        try {
-            // Update settings in database
-            const response = await apiClient.put('/auth/profile', {
-                settings: {
-                    ...user.settings,
-                    [setting]: value
-                }
-            });
-            const updatedUser = response.data.user;
-            localStorage.setItem('user', JSON.stringify(updatedUser));
-            setUser(updatedUser);
-        } catch (error) {
-            console.error('Error updating settings:', error);
+        // The app cannot record calls; the phone's dialer does, into the directory the
+        // native service watches. So this row only shortcuts to the dialer's setting, and in
+        // a browser there is nothing to shortcut to.
+        if (bridge?.openCallRecordingSettings) {
+            setCallRecordingSupported(true);
         }
-    };
+    }, []);
 
     // Deliberately not routed through handleToggle: this setting lives in Android
     // SharedPreferences, not in the backend user record, so it must not PUT /auth/profile.
@@ -112,29 +98,29 @@ const SettingsPage: React.FC = () => {
                 <section className={styles.settingsSection}>
                     <h3 className={styles.sectionTitle}>Call Settings</h3>
                     <div className={styles.settingsCard}>
-                        <div className={styles.settingItem}>
-                            <div className={styles.settingInfo}>
-                                <div className={`${styles.iconBox} ${styles.redIcon}`}>
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                                        <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
-                                        <line x1="12" x2="12" y1="19" y2="22" />
-                                    </svg>
+                        {callRecordingSupported && (
+                            <button
+                                className={`${styles.settingItem} ${styles.settingButton}`}
+                                onClick={() => window.BrachaNative?.openCallRecordingSettings?.()}
+                            >
+                                <div className={styles.settingInfo}>
+                                    <div className={`${styles.iconBox} ${styles.redIcon}`}>
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                                            <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+                                            <line x1="12" x2="12" y1="19" y2="22" />
+                                        </svg>
+                                    </div>
+                                    <div className={styles.settingText}>
+                                        <span className={styles.settingName}>Automatic Call Recording</span>
+                                        <span className={styles.settingDescription}>Enable it in your Phone app settings</span>
+                                    </div>
                                 </div>
-                                <div className={styles.settingText}>
-                                    <span className={styles.settingName}>Automatic Call Recording</span>
-                                    <span className={styles.settingDescription}>Record calls automatically</span>
-                                </div>
-                            </div>
-                            <label className={styles.switch}>
-                                <input
-                                    type="checkbox"
-                                    checked={autoCallRecording}
-                                    onChange={(e) => handleToggle('autoCallRecording', e.target.checked)}
-                                />
-                                <span className={styles.slider}></span>
-                            </label>
-                        </div>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                            </button>
+                        )}
                         {audioSettingSupported && (
                             <div className={styles.settingItem}>
                                 <div className={styles.settingInfo}>
