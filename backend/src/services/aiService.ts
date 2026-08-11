@@ -65,7 +65,15 @@ TASKS RULES:
 - If the call is purely personal with nothing to do, return an empty tasks array.
 - Deduplicate tasks: Merge repeated mentions of the same action into a single task.
 - When merging, retain the most complete description and the highest priority stated.
-- Detect the transcript's language and output the summary and task text in that EXACT language. Do not translate.`
+
+LANGUAGE RULES:
+- Answer in Hebrew. Every piece of human-readable text you produce must be Hebrew: "summary", and every task's "title" and "description".
+- This holds regardless of the transcript's language. If the call was in English or any other language, translate your answer into Hebrew. Do NOT mirror the transcript's language.
+- Do NOT translate the machine-read parts, or the response fails to parse:
+  - The JSON keys stay exactly as written above: summary, tasks, title, description, priority, dueDate.
+  - "priority" stays one of LOW, MEDIUM, HIGH — English, capitalised.
+  - "dueDate" stays in YYYY-MM-DD digits.
+- Keep people's names, company names, and product names in their original spelling rather than transliterating them.`
             },
             { role: "user", content: `Business description: ${businessDescription || 'None provided'}\n\nTranscript:\n${transcript}` }
         ],
