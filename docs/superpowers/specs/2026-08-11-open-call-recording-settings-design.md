@@ -34,8 +34,11 @@ that always lands somewhere useful.
 
 ### Native: `CallRecordingSettings.kt`
 
-Split along the same seam as `OverlayDecider`: pure decision logic with no Android
-imports, plus a thin Android launcher.
+Split along the same seam as `OverlayDecider`: pure decision logic that itself uses no
+Android types, plus a thin Android launcher, both in one file. Kotlin imports are
+file-scoped, so the file as a whole does import `android.*` (nine types, for the
+launcher) — the property that holds is narrower: every branch of the resolver is
+testable on the plain JVM, no device required.
 
 **`CallRecordingTarget`** — a sealed class of destinations:
 
@@ -67,9 +70,10 @@ builds the `Intent` and checks `packageManager.resolveActivity` **before** calli
 `ActivityNotFoundException`. The first target that resolves wins. Intents carry
 `FLAG_ACTIVITY_NEW_TASK`, because the bridge holds an application context.
 
-Alongside the launch it posts a toast naming the manual path — "Phone app → Settings →
-Call recording" — so a user who lands on app-info or the top-level Settings screen can
-finish the last hop. The toast is posted to `Looper.getMainLooper()`: JavaScript bridge
+Alongside the launch it posts a toast naming the manual path — "Open Settings → Call
+recording in your Phone app" — shown after every successful start, including a direct hit
+on the dialer's own settings activity, since even there the user still has to find "Call
+recording" themselves. The toast is posted to `Looper.getMainLooper()`: JavaScript bridge
 calls arrive on the WebView's JavaBridge thread, where a bare `Toast.show` throws.
 
 ### Manifest
@@ -116,8 +120,8 @@ In `frontend/src/pages/SettingsPage/SettingsPage.tsx`:
   its neighbours.
 - The `<label className={styles.switch}>` block is replaced by a right-pointing chevron
   SVG, matching the stroke weight of the existing row icons.
-- The description changes from "Record calls automatically" to "Turn this on in your
-  phone's dialer settings" — the row's job is now to explain where the real switch lives.
+- The description changes from "Record calls automatically" to "Enable it in your Phone
+  app settings" — the row's job is now to explain where the real switch lives.
 - `onClick` calls `window.BrachaNative?.openCallRecordingSettings?.()`.
 
 Deletions, all now dead: the `autoCallRecording` state (lines 12, 19, 32) and
