@@ -64,17 +64,26 @@ Every non-null package, known or not, is then followed by `AppInfo(pkg)` and
 `SystemSettings`. A null package yields `listOf(SystemSettings)` alone.
 
 **`CallRecordingSettingsLauncher`** — the Android half. Reads
-`TelecomManager.getDefaultDialerPackage()`, walks the target list, and for each target
-builds the `Intent` and checks `packageManager.resolveActivity` **before** calling
-`startActivity`. An OEM that lacks the activity is a silent skip, not an
-`ActivityNotFoundException`. The first target that resolves wins. Intents carry
-`FLAG_ACTIVITY_NEW_TASK`, because the bridge holds an application context.
+`TelecomManager.getDefaultDialerPackage()`, walks the target list, and starts the first
+target that works. Intents carry `FLAG_ACTIVITY_NEW_TASK`, because the bridge holds an
+application context.
 
-Alongside the launch it posts a toast naming the manual path — "Open Settings → Call
-recording in your Phone app" — shown after every successful start, including a direct hit
-on the dialer's own settings activity, since even there the user still has to find "Call
-recording" themselves. The toast is posted to `Looper.getMainLooper()`: JavaScript bridge
-calls arrive on the WebView's JavaBridge thread, where a bare `Toast.show` throws.
+The `packageManager.resolveActivity` check runs **only for `DialerSettings` targets** —
+those are the undocumented activities that may genuinely not exist, and an unchecked start
+would throw `ActivityNotFoundException`. `AppInfo` and `SystemSettings` go straight to
+`startActivity`. Gating them too would put the chain's one guarantee — that the last target
+always exists — behind a runtime check that could veto it, and a vetoed last target means
+the loop exhausts and the row does nothing at all, for exactly the users whose dialer deep
+link already missed. The loop's `try/catch` covers a refused start either way, so attempting
+costs nothing.
+
+Alongside the launch it posts a toast naming the manual path — "In your Phone app: Call
+settings → Record calls" — shown after every successful start, including a direct hit on
+the dialer's own settings activity, since even there the user still has to walk that path
+themselves. Those two labels are the Phone app's own wording, confirmed on a device; an OEM
+whose menu reads differently needs this string changed, not the navigation logic. The toast
+is posted to `Looper.getMainLooper()`: JavaScript bridge calls arrive on the WebView's
+JavaBridge thread, where a bare `Toast.show` throws.
 
 ### Manifest
 

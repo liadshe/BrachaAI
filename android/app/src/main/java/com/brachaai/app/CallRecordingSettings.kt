@@ -145,8 +145,12 @@ class CallRecordingSettingsLauncher(context: Context) {
     /**
      * Names the manual path to call recording. Shown after every successful start, including
      * a direct hit on the dialer's own settings activity — even there the user still has to
-     * find "Call recording" themselves, so the hint is useful on every path, not just the
-     * app-info and system-Settings fallbacks.
+     * walk "Call settings → Record calls" themselves, so the hint is useful on every path,
+     * not just the app-info and system-Settings fallbacks.
+     *
+     * Those two labels are what the Phone app actually calls them, confirmed on a device.
+     * They are the dialer's wording, not the platform's, so an OEM whose menu reads
+     * differently will need this string adjusted rather than the navigation logic.
      *
      * Posted to the main looper: JavaScript bridge calls arrive on the WebView's JavaBridge
      * thread, where a bare `Toast.show` throws for want of a Looper.
@@ -159,6 +163,6 @@ class CallRecordingSettingsLauncher(context: Context) {
 
     private companion object {
         const val TAG = "CallRecordingSettings"
-        const val HINT = "Open Settings → Call recording in your Phone app"
+        const val HINT = "In your Phone app: Call settings → Record calls"
     }
 }

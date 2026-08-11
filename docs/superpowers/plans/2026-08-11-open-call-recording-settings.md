@@ -15,7 +15,7 @@
 - `android/app/src/main/assets/www/` is a checked-in build artifact of `frontend/`, not source. Task 4 regenerates it; skipping Task 4 ships the old bundle and none of the UI change appears in the APK.
 - Do not touch `autoCallRecording` in `backend/src/models/User.ts`, `backend/src/controllers/authController.ts`, or `data/brachaai.users.json`. The field stays; only the frontend stops writing it.
 - Frontend lint runs with `--max-warnings 0`, so an unused import fails the build. Removing `handleToggle` makes the `apiClient` import in `SettingsPage.tsx` unused — it must be removed in the same task.
-- Copy strings, verbatim: row title `Automatic Call Recording`, row description `Enable it in your Phone app settings`, toast text `Open Settings → Call recording in your Phone app`.
+- Copy strings, verbatim: row title `Automatic Call Recording`, row description `Enable it in your Phone app settings`, toast text `In your Phone app: Call settings → Record calls`.
 
 ---
 
@@ -344,7 +344,7 @@ class CallRecordingSettingsLauncher(context: Context) {
 
     private companion object {
         const val TAG = "CallRecordingSettings"
-        const val HINT = "Open Settings → Call recording in your Phone app"
+        const val HINT = "In your Phone app: Call settings → Record calls"
     }
 }
 ```
@@ -662,7 +662,7 @@ None of the native half is verified by any automated check, so this is the real 
 
 1. Build and install: `cd android && ./gradlew installDebug`.
 2. Open Settings in BrachaAI. The "Automatic Call Recording" row shows a chevron, not a switch, and reads "Enable it in your Phone app settings".
-3. Tap it. The Phone app's settings screen opens, and a toast reads "Open Settings → Call recording in your Phone app".
+3. Tap it. The Phone app's settings screen opens, and a toast reads "In your Phone app: Call settings → Record calls".
 4. If it lands on Settings > Apps > Phone instead, the deep link missed on that build — capture the value of `TelecomManager.getDefaultDialerPackage()` from logcat (`adb logcat -s CallRecordingSettings`) and add that device's settings activity to `SETTINGS_ACTIVITIES`.
-5. Turn call recording on there, return, place a call, and confirm a file appears in `/storage/emulated/0/Recordings/Call` and gets transcribed.
+5. Walk **Call settings → Record calls** and turn it on, then return, place a call, and confirm a file appears in `/storage/emulated/0/Recordings/Call` and gets transcribed.
 6. Repeat on a Samsung device if one is available — the Samsung class name in the map is unverified.
