@@ -62,6 +62,16 @@ describe('SettingsPage automatic call recording row', () => {
         const row = screen.getByText(ROW).closest('button')!;
 
         expect(row.querySelector('input[type="checkbox"]')).toBeNull();
+        expect(screen.getByText('Enable it in your Phone app settings')).toBeTruthy();
+
+        fireEvent.click(row);
+
         expect(clientMock.history.put).toHaveLength(0);
+    });
+
+    it('hides the whole Call Settings card in a plain browser', () => {
+        renderPage();
+
+        expect(screen.queryByText('Call Settings')).toBeNull();
     });
 });

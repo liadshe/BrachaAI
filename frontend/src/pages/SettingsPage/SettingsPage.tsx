@@ -94,7 +94,10 @@ const SettingsPage: React.FC = () => {
                     <button className={styles.editBtn} onClick={() => navigate('/edit-profile')}>Edit</button>
                 </section>
 
-                {/* Call Settings Section */}
+                {/* Call Settings Section: both rows are native-only, so in a plain browser
+                    neither renders. Gate the whole section on that, or a browser gets the
+                    heading followed by an empty card. */}
+                {(callRecordingSupported || audioSettingSupported) && (
                 <section className={styles.settingsSection}>
                     <h3 className={styles.sectionTitle}>Call Settings</h3>
                     <div className={styles.settingsCard}>
@@ -150,6 +153,7 @@ const SettingsPage: React.FC = () => {
                         )}
                     </div>
                 </section>
+                )}
 
                 {/* Account Section */}
                 <section className={styles.settingsSection}>
