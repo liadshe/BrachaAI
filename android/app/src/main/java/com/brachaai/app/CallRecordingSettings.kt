@@ -30,12 +30,13 @@ sealed class CallRecordingTarget {
     data class AppInfo(val packageName: String) : CallRecordingTarget()
 
     /** The top-level system Settings screen. The last resort; always resolvable. */
-    object SystemSettings : CallRecordingTarget()
+    data object SystemSettings : CallRecordingTarget()
 }
 
 /**
- * Pure decision logic, deliberately free of `android.*` imports so every branch is testable
- * without a device — the same split [OverlayDecider] uses.
+ * Pure decision logic. Unlike [CallRecordingSettingsLauncher] below — which shares this file
+ * but imports nine `android.*` types — the resolver itself uses none, so every branch here is
+ * testable on the plain JVM, no device required. Same split [OverlayDecider] uses.
  */
 object CallRecordingSettingsResolver {
 
@@ -79,10 +80,14 @@ object CallRecordingSettingsResolver {
 /**
  * Opens the phone's call-recording setting, best effort.
  *
- * Every target is checked with `resolveActivity` before it is started. The dialer settings
- * activities are undocumented, so a device that lacks one has to be a skip — an unchecked
- * `startActivity` would throw `ActivityNotFoundException` and take the Settings page down
- * with it.
+ * Only [CallRecordingTarget.DialerSettings] is checked with `resolveActivity` before it is
+ * started — those component names are undocumented and may not exist on a given device, so a
+ * miss has to be a silent skip rather than a crash. [CallRecordingTarget.AppInfo] and
+ * [CallRecordingTarget.SystemSettings] are documented, always-resolvable system actions; gating
+ * them the same way would mean that if `resolveActivity` ever returned a false negative for one
+ * of them, the loop would exhaust with nothing started, for exactly the users whose dialer deep
+ * link already missed. They go straight to `startActivity`, and the existing `try/catch` below
+ * already covers `ActivityNotFoundException`, so attempting costs nothing.
  */
 class CallRecordingSettingsLauncher(context: Context) {
 
@@ -93,12 +98,15 @@ class CallRecordingSettingsLauncher(context: Context) {
 
         for (target in targets) {
             val intent = intentFor(target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            if (appContext.packageManager.resolveActivity(intent, 0) == null) {
+            if (target is CallRecordingTarget.DialerSettings &&
+                appContext.packageManager.resolveActivity(intent, 0) == null
+            ) {
                 Log.d(TAG, "Skipping unresolvable target: $target")
                 continue
             }
             try {
                 appContext.startActivity(intent)
+                Log.i(TAG, "Opened $target")
                 showHint()
                 return
             } catch (e: Exception) {
@@ -135,7 +143,10 @@ class CallRecordingSettingsLauncher(context: Context) {
     }
 
     /**
-     * Names the last hop for whoever landed on app-info or the top-level Settings screen.
+     * Names the manual path to call recording. Shown after every successful start, including
+     * a direct hit on the dialer's own settings activity — even there the user still has to
+     * find "Call recording" themselves, so the hint is useful on every path, not just the
+     * app-info and system-Settings fallbacks.
      *
      * Posted to the main looper: JavaScript bridge calls arrive on the WebView's JavaBridge
      * thread, where a bare `Toast.show` throws for want of a Looper.
