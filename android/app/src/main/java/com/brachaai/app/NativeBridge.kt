@@ -20,6 +20,7 @@ class NativeBridge(
     private val appContext = context.applicationContext
     private val authStore = AuthStore(appContext)
     private val settingsStore = SettingsStore(appContext)
+    private val callRecordingSettings = CallRecordingSettingsLauncher(appContext)
 
     /**
      * Receives the *native* token pair, minted by the web app via /auth/device-token.
@@ -91,6 +92,23 @@ class NativeBridge(
     fun setDeleteAudioAfterProcessing(enabled: Boolean) {
         settingsStore.deleteAudioAfterProcessing = enabled
         Log.d(TAG, "deleteAudioAfterProcessing set to $enabled")
+    }
+
+    /**
+     * Opens the phone's own call-recording setting.
+     *
+     * Unlike every other setting here, this one is not ours to store: the dialer records the
+     * calls this app transcribes, so its setting is the only switch that does anything. The
+     * body cannot throw — a failure across the JS bridge would break the Settings page, and
+     * the launcher already treats "nowhere to go" as a normal outcome.
+     */
+    @JavascriptInterface
+    fun openCallRecordingSettings() {
+        try {
+            callRecordingSettings.open()
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not open call recording settings", e)
+        }
     }
 
     companion object {

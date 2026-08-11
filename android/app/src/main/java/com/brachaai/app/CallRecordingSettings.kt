@@ -1,5 +1,15 @@
 package com.brachaai.app
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
+import android.telecom.TelecomManager
+import android.util.Log
+import android.widget.Toast
+
 /**
  * Where to send a user who wants automatic call recording turned on.
  *
@@ -64,4 +74,80 @@ object CallRecordingSettingsResolver {
             "com.samsung.android.dialer.settings.DialerSettingsActivity",
         ),
     )
+}
+
+/**
+ * Opens the phone's call-recording setting, best effort.
+ *
+ * Every target is checked with `resolveActivity` before it is started. The dialer settings
+ * activities are undocumented, so a device that lacks one has to be a skip — an unchecked
+ * `startActivity` would throw `ActivityNotFoundException` and take the Settings page down
+ * with it.
+ */
+class CallRecordingSettingsLauncher(context: Context) {
+
+    private val appContext = context.applicationContext
+
+    fun open() {
+        val targets = CallRecordingSettingsResolver.targetsFor(defaultDialerPackage())
+
+        for (target in targets) {
+            val intent = intentFor(target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (appContext.packageManager.resolveActivity(intent, 0) == null) {
+                Log.d(TAG, "Skipping unresolvable target: $target")
+                continue
+            }
+            try {
+                appContext.startActivity(intent)
+                showHint()
+                return
+            } catch (e: Exception) {
+                // A target can resolve and still be refused — an unexported activity, or an
+                // OEM blocking the start. Keep walking rather than dead-ending the user.
+                Log.w(TAG, "Could not start $target", e)
+            }
+        }
+
+        Log.w(TAG, "No call-recording settings target could be opened")
+    }
+
+    /**
+     * Null when there is no default dialer, or when the lookup throws — some OEM builds do.
+     * The resolver treats null as "system Settings only", which is still somewhere useful.
+     */
+    private fun defaultDialerPackage(): String? = try {
+        appContext.getSystemService(TelecomManager::class.java)?.defaultDialerPackage
+    } catch (e: Exception) {
+        Log.w(TAG, "Could not read the default dialer package", e)
+        null
+    }
+
+    private fun intentFor(target: CallRecordingTarget): Intent = when (target) {
+        is CallRecordingTarget.DialerSettings ->
+            Intent().setClassName(target.packageName, target.className)
+
+        is CallRecordingTarget.AppInfo ->
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:${target.packageName}")
+            }
+
+        CallRecordingTarget.SystemSettings -> Intent(Settings.ACTION_SETTINGS)
+    }
+
+    /**
+     * Names the last hop for whoever landed on app-info or the top-level Settings screen.
+     *
+     * Posted to the main looper: JavaScript bridge calls arrive on the WebView's JavaBridge
+     * thread, where a bare `Toast.show` throws for want of a Looper.
+     */
+    private fun showHint() {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(appContext, HINT, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private companion object {
+        const val TAG = "CallRecordingSettings"
+        const val HINT = "Open Settings → Call recording in your Phone app"
+    }
 }
