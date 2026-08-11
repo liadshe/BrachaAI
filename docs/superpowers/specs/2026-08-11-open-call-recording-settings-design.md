@@ -107,13 +107,23 @@ target always exists — behind a runtime check that could veto it, and a vetoed
 means the loop exhausts and the row does nothing at all, for exactly the users whose dialer
 deep link already missed. The loop's `try/catch` covers a refused start either way.
 
-Alongside the launch it posts a toast naming the manual path — "Phone app: tap ⋮ (top right)
-→ Settings → Record calls" — shown after every successful start, since even a direct hit on
-the dialer's settings screen leaves the user to find "Record calls". The wording starts from
-the dialer's home screen because that is the most common landing. These are the Phone app's
-own labels, reported from a device; an OEM whose menu reads differently needs this string
-changed, not the navigation logic. The toast is posted to `Looper.getMainLooper()`: JavaScript
-bridge calls arrive on the WebView's JavaBridge thread, where a bare `Toast.show` throws.
+Alongside the launch it posts a toast naming the hops that are left, **counted from the target
+that actually landed** — "Tap Record calls → Auto record calls" from a settings screen, "Tap ⋮
+(top right) → Settings → Record calls" from the dialer's home. A single fixed string was wrong
+half the time: it either described steps the user had already finished or named a row that was
+not on screen. Labels are One UI's own, read off the device; "Auto record calls" is the toggle
+itself. The toast is posted to `Looper.getMainLooper()`: JavaScript bridge calls arrive on the
+WebView's JavaBridge thread, where a bare `Toast.show` throws.
+
+**Why the walk stops at Call settings.** On One UI the "Record calls" screen is a nested
+`PreferenceScreen` inside a single generic `CallSettingsPreferenceFragment`, with no public
+entry point. Four mechanisms were tried on a Galaxy S25 and all four land on the Call settings
+root: no record-specific action exists anywhere in the package; the
+`callApp://viv.phoneApp/CallSettings` filter is a `PatternMatcher{PREFIX}` that ignores any
+suffix; there is no distinct fragment class for `:settings:show_fragment` to target; and
+`:settings:fragment_args_key` — which the dex does reference — highlights a preference rather
+than navigating into a nested screen. The last two taps belong to the user, which is why the
+toast has to name them correctly rather than pretend otherwise.
 
 ### Manifest
 

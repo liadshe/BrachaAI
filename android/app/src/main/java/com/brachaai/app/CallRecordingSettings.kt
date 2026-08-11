@@ -174,7 +174,7 @@ class CallRecordingSettingsLauncher(context: Context) {
             try {
                 appContext.startActivity(intent)
                 Log.i(TAG, "Opened $target")
-                showHint()
+                showHint(hintFor(target))
                 return
             } catch (e: Exception) {
                 // A target can resolve and still be refused — an unexported activity, or an
@@ -238,26 +238,45 @@ class CallRecordingSettingsLauncher(context: Context) {
     }
 
     /**
-     * Names the manual path to call recording. Shown after every successful start, including a
-     * direct hit on the dialer's settings activity — even there the user still has to find
-     * "Record calls" themselves, so the hint is useful on every path.
+     * The hops still left for the user, counted from wherever this target actually landed.
      *
-     * The wording starts from the dialer's home screen, because that is where the most common
-     * landing now is: [CallRecordingTarget.DialerApp]. From a settings screen the first step is
-     * simply already done. These are the Phone app's own labels, reported from a real device —
-     * an OEM whose menu reads differently needs this string changed, not the navigation logic.
+     * A hint has to be per-target or it is wrong half the time: telling someone already looking
+     * at Call settings to "tap ⋮ → Settings" describes steps they have finished, while telling
+     * someone dropped on the dialer's home screen to "tap Record calls" names a row that is not
+     * on screen.
      *
+     * The walk cannot be shortened past this point. On One UI the "Record calls" screen is a
+     * nested `PreferenceScreen` inside one generic `CallSettingsPreferenceFragment` — there is
+     * no action for it, the `callApp://viv.phoneApp/CallSettings` filter is a PREFIX matcher
+     * that ignores any suffix, and `:settings:fragment_args_key` does not navigate into it.
+     * All four were tried on a Galaxy S25 and all four land on the Call settings root, so the
+     * last hops are the user's to make and the toast has to name them accurately.
+     *
+     * Labels are One UI's own, read off the device — "Auto record calls" is the toggle itself.
+     */
+    private fun hintFor(target: CallRecordingTarget): String = when (target) {
+        is CallRecordingTarget.SettingsAction,
+        is CallRecordingTarget.DialerSettings ->
+            "Tap Record calls → Auto record calls"
+
+        is CallRecordingTarget.DialerApp ->
+            "Tap ⋮ (top right) → Settings → Record calls"
+
+        CallRecordingTarget.SystemSettings ->
+            "Open your Phone app's settings → Record calls"
+    }
+
+    /**
      * Posted to the main looper: JavaScript bridge calls arrive on the WebView's JavaBridge
      * thread, where a bare `Toast.show` throws for want of a Looper.
      */
-    private fun showHint() {
+    private fun showHint(hint: String) {
         Handler(Looper.getMainLooper()).post {
-            Toast.makeText(appContext, HINT, Toast.LENGTH_LONG).show()
+            Toast.makeText(appContext, hint, Toast.LENGTH_LONG).show()
         }
     }
 
     private companion object {
         const val TAG = "CallRecordingSettings"
-        const val HINT = "Phone app: tap ⋮ (top right) → Settings → Record calls"
     }
 }
