@@ -109,4 +109,50 @@ describe('createTasksFromAi', () => {
         expect(Task.create).toHaveBeenCalledTimes(1);
         expect(vi.mocked(Task.create).mock.calls[0][0]).toMatchObject({ priority: 'HIGH' });
     });
+
+    it('stores the deadline the AI resolved from the call', async () => {
+        await createTasksFromAi(USER_ID, CONTACT_ID, [
+            { title: 'Send the contract', description: '', priority: 'LOW', dueDate: '2026-08-13' },
+        ]);
+
+        expect(vi.mocked(Task.create).mock.calls[0][0]).toMatchObject({
+            dueDate: '2026-08-13',
+        });
+    });
+
+    it('keeps the tighter deadline when a task is mentioned with two dates', async () => {
+        await createTasksFromAi(USER_ID, CONTACT_ID, [
+            { title: 'Send the contract', description: '', priority: 'LOW', dueDate: '2026-08-20' },
+            { title: 'Send the contract', description: '', priority: 'LOW', dueDate: '2026-08-13' },
+        ]);
+
+        expect(Task.create).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(Task.create).mock.calls[0][0]).toMatchObject({
+            dueDate: '2026-08-13',
+        });
+    });
+
+    it('takes the deadline from whichever mention actually carried one', async () => {
+        await createTasksFromAi(USER_ID, CONTACT_ID, [
+            { title: 'Send the contract', description: '', priority: 'LOW' },
+            { title: 'Send the contract', description: '', priority: 'LOW', dueDate: '2026-08-13' },
+        ]);
+
+        expect(Task.create).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(Task.create).mock.calls[0][0]).toMatchObject({
+            dueDate: '2026-08-13',
+        });
+    });
+
+    it('leaves the deadline unset rather than storing a value that is not a date', async () => {
+        await createTasksFromAi(USER_ID, CONTACT_ID, [
+            { title: 'Send the contract', description: '', priority: 'LOW', dueDate: 'מחר' },
+            { title: 'Book the room', description: '', priority: 'LOW', dueDate: '2026-02-30' },
+            { title: 'Call the client', description: '', priority: 'LOW', dueDate: '' },
+        ]);
+
+        for (const [doc] of vi.mocked(Task.create).mock.calls as any[][]) {
+            expect(doc.dueDate).toBeUndefined();
+        }
+    });
 });
