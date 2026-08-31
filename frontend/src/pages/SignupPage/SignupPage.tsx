@@ -56,7 +56,9 @@ const SignupPage: React.FC = () => {
 
                 {/* Logo Section */}
                 <div className={styles.logoSection}>
-                <img src="/logo.png" alt="Bracha AI" className={styles.logoImage} />
+                    <div className={styles.logoBox}>
+                        <img src="logo.png" alt="Bracha AI" className={styles.logoImage} />
+                    </div>
                 </div>
                 <h1 className={styles.title}>Create Account</h1>
                 <p className={styles.subtitle}>Join Bracha AI to manage your business</p>
